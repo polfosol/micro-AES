@@ -2,7 +2,7 @@
 <CodeBlocks_project_file>
 	<FileVersion major="1" minor="6" />
 	<Project>
-		<Option title="testvecs" />
+		<Option title="XTStest" />
 		<Option pch_mode="2" />
 		<Option compiler="gcc" />
 		<Build>
@@ -36,7 +36,7 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="../micro_aes.h" />
-		<Unit filename="testvec.c">
+		<Unit filename="XTStest.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Extensions>

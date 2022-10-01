@@ -392,7 +392,7 @@ These constants should be defined here for external references:
 #endif /* header guard */
 
 /**--------------------------------------------------------------------------**\
-=<             Notes and remarks about the above-defined macros               >=
+=<              Notes and remarks about the above-defined macros              >=
  ------------------------------------------------------------------------------
 
 * Some AES modes just use the 'encryption' part of the Rijndael algorithm. So if
@@ -409,7 +409,7 @@ These constants should be defined here for external references:
     is a part of the I.V, which itself can either be a full block or a partial
     one. In CBC/CFB/OFB modes, the provided I.V must be a full block. In pure
     CTR mode (CTRNA) you can either provide a 96-bit I.V and let the count start
-    at INIT_CTR_VALUE, or use a full block I.V. Anyhow, according to RFC-3686,
+    at INIT_CTR_VALUE, or use a full block IV. Anyhow, according to RFC-3686,
     the counter value must start at 1.
 
 * In AEAD modes, the size of nonce and tag might be a parameter of the algorithm

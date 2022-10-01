@@ -102,7 +102,7 @@ typedef void  (*fmix_t)(const block_t, block_t);
 #if REDUCE_CODE_SIZE
 
 /** multiply by 2 in GF(2^8): left-shift and if carry bit is 1, xor with 0x1b */
-#define xtime(x)   ( (x) << 1 ^ ((x) & 0x80 ? 0x1b : 0) )
+#define xtime(x)   ( (x << 1) ^ (x & 0x80 ? 0x1b : 0) )
 
 /** performs XOR operation on two 128-bit blocks ............................ */
 static void xorBlock( const block_t src, block_t dest )
@@ -414,9 +414,8 @@ static void xorThenMix( const uint8_t* x, const uint8_t len,
                         const block_t src, fmix_t mix, block_t y )
 {
     uint8_t i;
-    if (len == 0)  return;
-
     for (i = 0; i < len; ++i)  y[i] ^= x[i];
+
     mix( src, y );                               /*  Y = mix( S, Y ^ X )      */
 }
 #endif
@@ -588,9 +587,9 @@ static void MAC( const uint8_t* data, const size_T dataSize,
         mix( seed, result );                     /*  H_next = mix( seed ^ H ) */
         x += BLOCKSIZE;                          /*  move on to next block    */
     }
-
-    /* finally, apply the same process to the last partial block (if any) ... */
-    xorThenMix( x, dataSize % BLOCKSIZE, seed, mix, result );
+                                                 /*  do the same with last    */
+    n = dataSize % BLOCKSIZE;                    /*  ..partial block (if any) */
+    if (n)  xorThenMix( x, n, seed, mix, result );
 }
 #endif
 
@@ -600,13 +599,13 @@ static void MAC( const uint8_t* data, const size_T dataSize,
 static void CMAC( const block_t D, const block_t Q,
                   const uint8_t* data, const size_T dataSize, block_t mac )
 {
-    block_t M = { 0 };
-    uint8_t r = (dataSize - 1) % BLOCKSIZE + 1;
+    uint8_t r, M[BLOCKSIZE] = { 0 };
     if (dataSize == 0)  return;
 
-    if (r < BLOCKSIZE)  M[r] = 0x80;
+    r = (dataSize - 1) % BLOCKSIZE + 1;
     memcpy( M, data + dataSize - r, r );         /*  copy last block into M   */
-    xorBlock( r < BLOCKSIZE ? Q : D, M );        /*  ..and pad( M; D, Q )     */
+    xorBlock( r < sizeof M ? Q : D, M );         /*  ..and pad( M; D, Q )     */
+    if (r < sizeof M)  M[r] ^= 0x80;
 
     MAC( data, dataSize - r, mac, &RijndaelEncrypt, mac );
     xorThenMix( M, sizeof M, mac, &RijndaelEncrypt, mac );
@@ -1352,7 +1351,7 @@ void AES_SIV_encrypt( const uint8_t* keys,
 
     S2V( keys, aData, pText + pTextLen - r, aDataLen, r, IV );
     memcpy( iv, IV, sizeof IV );
-    IV[8] &= 0x7F;  IV[12] &= 0x7F;
+    IV[8] &= 0x7F;  IV[12] &= 0x7F;              /*  clear two bits           */
 
     AES_SetKey( keys + KEYSIZE );
     CTR_Cipher( IV, ~0, pText, pTextLen, cText );
@@ -1462,14 +1461,14 @@ void AES_EAX_encrypt( const uint8_t* key,
 
 #if EAXP
     memcpy( auTag, mac + 12, 4 );
-    mac[12] &= 0x7F;                             /*  get N' by zeroing 2 bits */
+    mac[12] &= 0x7F;                             /*  clear 2 bits to get N'   */
     mac[14] &= 0x7F;
     CTR_Cipher( mac, ~0, pText, pTextLen, cText );
 
     OMAC( 2, Ld, Lq, cText, pTextLen, tag );     /*  C' = CMAC'( ciphertext ) */
     for (*Ld = 0; *Ld < 4; ++*Ld)                /*  using Ld[0] as counter!  */
     {
-        auTag[*Ld] ^= tag[12 + *Ld];
+        auTag[*Ld] ^= tag[12 + *Ld];             /*  last 4 bytes of C' ^ N'  */
     }
 #else
     OMAC( 1, Ld, Lq, aData, aDataLen, tag );     /*  H = OMAC(1; adata)       */
@@ -1517,7 +1516,7 @@ char AES_EAX_decrypt( const uint8_t* key,
         *Lq |= tag[12 + *Ld] ^ mac[12 + *Ld] ^ cText[cTextLen + *Ld];
     }
     mac[12] &= 0x7F;
-    mac[14] &= 0x7F;                             /*  get N' by zeroing 2 bits */
+    mac[14] &= 0x7F;                             /*  clear 2 bits to get N'   */
     if (*Lq != 0)
 #else
     OMAC( 1, Ld, Lq, aData, aDataLen, mac );     /*  H = OMAC(1; adata)       */
@@ -1612,16 +1611,15 @@ static void OCB_GetTag( const block_t Ds,
                         const size_T pTextLen, const size_T aDataLen,
                         block_t tag )
 {
-    block_t S = { 0 };                           /*         checksum          */
+    block_t S = { 0 };                           /*  checksum, i.e. ...       */
     count_T i = pTextLen % BLOCKSIZE, n;
     const uint8_t *x = aData;
 
-    MAC( pText, pTextLen, NULL, &nop, S );       /* S = xor of all plain-text */
-    if (i)  S[i] ^= 0x80;
+    MAC( pText, pTextLen, NULL, &nop, S );       /*  ..xor of all plaintext   */
+    xorThenMix( Ds, BLOCKSIZE, Ld, &xorBlock, S );
+    if (i)  S[i] ^= 0x80;                        /*  pad if partial block     */
 
-    xorBlock( Ds, S );
-    xorBlock( Ld, S );                           /* Tag0 = Enc(L_$ ^ Δ_* ^ S) */
-    RijndaelEncrypt( S, tag );
+    RijndaelEncrypt( S, tag );                   /* Tag0 = Enc(L_$ ^ Δ_* ^ S) */
     if (!aDataLen)  return;
 
     memset( S, 0, sizeof S );
@@ -1638,9 +1636,9 @@ static void OCB_GetTag( const block_t Ds,
     }
     i = aDataLen % BLOCKSIZE;
     if (i)
-    {                                            /*  Δ_n is calculated as S   */
-        getOffset( Ld, n, S );                   /*  S_* = A_* ^ Δ_*,  where  */
-        xorThenMix( x, i, Ls, &xorBlock, S );    /*  ..Δ_* = L_* ^ Δ_n        */
+    {
+        getOffset( Ld, n, S );                   /*  S = calculated Δ_n       */
+        xorThenMix( x, i, Ls, &xorBlock, S );    /*  S_* = A_* ^ L_* ^ Δ_n    */
         S[i] ^= 0x80;                            /*  ..A_* = A || 1  (padded) */
         RijndaelEncrypt( S, S );
         xorBlock( S, tag );                      /*  Tag = Enc(S_*) ^ Tag_n   */

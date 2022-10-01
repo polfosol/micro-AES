@@ -113,7 +113,7 @@ int main()
             m = n;
         }
     }
-    printf ("test cases: %d, successful: %d, failed encrypt: %d, failed decrypt: %d\n",
+    printf ("test cases: %d\nsuccessful: %d\nfailed encrypt: %d, failed decrypt: %d\n",
         pass + ef + df, pass, ef, df);
 
     fclose(fp); fclose(fs); fclose(ferr);

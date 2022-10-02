@@ -79,11 +79,6 @@ REFER TO THE BOTTOM OF THIS DOCUMENT FOR SOME EXPLANATIONS ABOUT THESE MACROS:
 #define CTR_IV_LENGTH  12  /* changing this value may break GCM mode as well. */
 #endif
 
-#if CCM
-#define CCM_NONCE_LEN  11  /* for 32-bit count (since one byte is reserved).  */
-#define CCM_TAG_LEN    16
-#endif
-
 #if GCM
 #define GCM_NONCE_LEN  12  /* RECOMMENDED. please don't change, or see below  */
 #endif
@@ -93,7 +88,12 @@ REFER TO THE BOTTOM OF THIS DOCUMENT FOR SOME EXPLANATIONS ABOUT THESE MACROS:
 #endif
 
 #if EAX && !EAXP
-#define EAX_NONCE_LEN  16  /* no practical limit; can be arbitrarily large    */
+#define EAX_NONCE_LEN  16  /* practically no limit; can be arbitrarily large  */
+#endif
+
+#if CCM
+#define CCM_NONCE_LEN  11  /* for 32-bit count (since one byte is reserved).  */
+#define CCM_TAG_LEN    16
 #endif
 
 /**----------------------------------------------------------------------------
@@ -419,7 +419,7 @@ These constants should be defined here for external references:
     is a part of the I.V, which itself can either be a full block or a partial
     one. In CBC/CFB/OFB modes, the provided I.V must be a full block. In pure
     CTR mode (CTR_NA) you can either provide a 96-bit I.V and let the count
-    start at INIT_CTR_VALUE, or use a full block I.V. Anyhow, according to the
+    start at INIT_CTR_VALUE, or use a full block IV. Anyhow, according to the
     RFC-3686, the counter value must start at 1.
 
 * In AEAD modes, the size of nonce and tag might be a parameter of the algorithm
@@ -431,10 +431,10 @@ These constants should be defined here for external references:
     encryption functions, the provided authTag buffer must be 16 bytes long.
 
 * As stated above, GCM mode supports arbitrary nonce length. But if you want to
-    use the functions of this library for such IVs, you'll need to pre-process
-    them first and calculate J_0. Then use it as the provided iv parameter for
-    those functions. The process of calculating J_0 is the same as digesting
-    aData or cText, i.e. J_0 = GHash(IV; GCM_IV_LEN)
+    use the functions of this library for such nonces, first you will need to
+    pre-process the nonce and calculate J_0. Then use J_0 as the provided IV
+    parameter for those functions. The process of calculating J_0 is the same as
+    digesting aData or cText, i.e. J_0 = GHash(nonce; GCM_NONCE_LEN)
 
 * For the EAX mode of operation, the IEEE-1703 standard defines EAX' which is a
     modified version that combines AAD and nonce. Also the tag size is fixed to

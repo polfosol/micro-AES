@@ -31,7 +31,7 @@ static void bytes2str(const uint8_t* bytes, char* str, size_t len)
 static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* c, uint8_t n, char* r)
 {
     int false_negative = (n == 17 && (p[16] & 0x1F) == 0 && (c[16] & 0x1F) == 0);
-    char sk[70], si[40], sp[70], sc[70], msg[30];
+    char sk[80], si[40], sp[80], sc[80], msg[30];
     uint8_t tmp[32], t = 0;
     sprintf(msg, "%s", "success");
 
@@ -52,7 +52,7 @@ static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* c, uint8_t
     bytes2str(iv, si, 16);
     bytes2str(p, sp, n);
     bytes2str(c, sc, n);
-    sprintf(r, "%s\nk: %s\ni: %s\np: %s\nc: %s", msg, sk, si, sp, sc);
+    sprintf(r, "%s\nK: %s\ni: %s\nP: %s\nC: %s", msg, sk, si, sp, sc);
     return t;
 }
 
@@ -110,14 +110,11 @@ int main()
         if (n == 2)
         {
             n = ciphertest(key, iv, p, c, s, buffer);
-            if (n == 0)
-            {
-                fprintf(fs, "%s\n", buffer);
-                ++pass;
-            }
+
+            fprintf(n ? ferr : fs, "%s\n", buffer); /* save the log */
+            if (n == 0) ++pass;
             else
             {
-                fprintf(ferr, "%s\n", buffer); /* test has failed :(( */
                 if (n & 1) ++ef;
                 if (n & 2) ++df;
                 n = 0;

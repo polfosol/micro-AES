@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.h
  Author      : polfosol
- Version     : 8.0.0.0
+ Version     : 8.1.0.0
  Copyright   : copyright © 2022 - polfosol
  Description : μAES ™ is a minimalist all-in-one library for AES encryption
  ==============================================================================
@@ -33,7 +33,7 @@ AES block-cipher modes of operation. The following modes can be enabled/disabled
 #endif
 
 #if CTR
-#define CTRNA     1        /* pure counter mode, with no authentication       */
+#define CTR_NA    1        /* pure counter mode, with no authentication       */
 #define CCM       1        /* counter with CBC-MAC (RFC-3610 & SP 800-38C)    */
 #define GCM       1        /* Galois/counter mode with GMAC (NIST SP 800-38D) */
 #define EAX       1        /* encrypt-authenticate-translate (ANSI C12.22)    */
@@ -75,17 +75,25 @@ REFER TO THE BOTTOM OF THIS DOCUMENT FOR SOME EXPLANATIONS ABOUT THESE MACROS:
 #endif
 
 #if CTR
-#define INIT_CTR_VALUE 1   /* if set to ~0 a full block I.V is used in CTRNA. */
-#define CTR_IV_SIZE    12  /* this value applies to the GCM mode as well.     */
+#define INIT_CTR_VALUE 1   /* if set to ~0 a full block I.V is used in CTR_NA */
+#define CTR_IV_LENGTH  12  /* changing this value may break GCM mode as well. */
 #endif
 
 #if CCM
-#define CCM_IV_SIZE    11  /* for 32-bit count (since one byte is reserved).  */
-#define CCM_TAG_SIZE   16
+#define CCM_NONCE_LEN  11  /* for 32-bit count (since one byte is reserved).  */
+#define CCM_TAG_LEN    16
+#endif
+
+#if GCM
+#define GCM_NONCE_LEN  12  /* RECOMMENDED. please don't change, or see below  */
 #endif
 
 #if OCB
-#define OCB_TAG_SIZE   16  /* again, please see the bottom of this document!  */
+#define OCB_TAG_LEN    16  /* again, please see the bottom of this document!  */
+#endif
+
+#if EAX && !EAXP
+#define EAX_NONCE_LEN  16  /* no practical limit; can be arbitrarily large    */
 #endif
 
 /**----------------------------------------------------------------------------
@@ -207,7 +215,7 @@ char AES_XTS_decrypt( const uint8_t* keys,    /* decryption key pair          */
 /**----------------------------------------------------------------------------
 Main functions for CTR-AES block ciphering
  -----------------------------------------------------------------------------*/
-#if CTRNA
+#if CTR_NA
 void AES_CTR_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t* iv,      /* initialization vector/ nonce */
                       const uint8_t* pText,   /* plain text                   */
@@ -331,10 +339,11 @@ Main functions for EAX-AES mode; more info at the bottom of this document.
 #if EAX
 void AES_EAX_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t* nonce,   /* initialization vector        */
-                      const size_T nonceLen,  /* size of provided nonce       */
                       const uint8_t* pText,   /* plain text                   */
                       const size_T pTextLen,  /* length of input plain text   */
-#if !EAXP
+#if EAXP
+                      const size_T nonceLen,  /* size of provided nonce       */
+#else
                       const uint8_t* aData,   /* added authentication data    */
                       const size_T aDataLen,  /* size of authentication data  */
 #endif
@@ -343,10 +352,11 @@ void AES_EAX_encrypt( const uint8_t* key,     /* encryption key               */
 
 char AES_EAX_decrypt( const uint8_t* key,     /* decryption key               */
                       const uint8_t* nonce,   /* initialization vector        */
-                      const size_T nonceLen,  /* size of provided nonce       */
                       const uint8_t* cText,   /* cipher text                  */
                       const size_T cTextLen,  /* length of input cipher-text  */
-#if !EAXP
+#if EAXP
+                      const size_T nonceLen,  /* size of provided nonce       */
+#else
                       const uint8_t* aData,   /* added authentication data    */
                       const size_T aDataLen,  /* size of authentication data  */
                       const uint8_t* auTag,   /* authentication tag           */
@@ -405,29 +415,35 @@ These constants should be defined here for external references:
     PKCS#7 and ISO/IEC 7816-4, which can be enabled by AES_PADDING macro.
 
 * In many texts, you may see that the words 'nonce' and 'initialization vector'
-    are used interchangeably. But they have a subtle difference. Typically nonce
+    are used interchangeably. But they have a subtle difference. Sometimes nonce
     is a part of the I.V, which itself can either be a full block or a partial
     one. In CBC/CFB/OFB modes, the provided I.V must be a full block. In pure
-    CTR mode (CTRNA) you can either provide a 96-bit I.V and let the count start
-    at INIT_CTR_VALUE, or use a full block IV. Anyhow, according to RFC-3686,
-    the counter value must start at 1.
+    CTR mode (CTR_NA) you can either provide a 96-bit I.V and let the count
+    start at INIT_CTR_VALUE, or use a full block I.V. Anyhow, according to the
+    RFC-3686, the counter value must start at 1.
 
 * In AEAD modes, the size of nonce and tag might be a parameter of the algorithm
     such that changing them affect the results. In CCM, the nonce/I.V size may
     vary from 8 to 13 bytes. Also the tag size is an EVEN number between 4..16.
-    In OCB, only the tag size is a parameter between 0..16 bytes. The GCM mode
-    is independent from both. Nonetheless, the 'calculated' tag size is always
-    16 bytes which can later be truncated to the desired value. So in encryption
-    functions, the provided authTag buffer must be at least 16 bytes long.
+    In OCB, only the tag size is a parameter between 0..16 bytes. The GCM/EAX
+    modes support arbitrary sizes for nonce. Note that the 'calculated' tag size
+    is always 16 bytes which can later be truncated to the desired value. So in
+    encryption functions, the provided authTag buffer must be 16 bytes long.
 
-* The EAX mode supports arbitrary size for nonce. The IEEE-1703 standard defines
-    EAX' which is a modified version of EAX, combining AAD and nonce. Also the
-    tag size is fixed on 4 bytes. So EAX-prime functions don't need to take
-    additional authentication data and tag-size as separate parameters.
+* As stated above, GCM mode supports arbitrary nonce length. But if you want to
+    use the functions of this library for such IVs, you'll need to pre-process
+    them first and calculate J_0. Then use it as the provided iv parameter for
+    those functions. The process of calculating J_0 is the same as digesting
+    aData or cText, i.e. J_0 = GHash(IV; GCM_IV_LEN)
+
+* For the EAX mode of operation, the IEEE-1703 standard defines EAX' which is a
+    modified version that combines AAD and nonce. Also the tag size is fixed to
+    4 bytes. So EAX-prime functions don't need to take additional authentication
+    data and tag-size as separate parameters.
 
 * In SIV mode, multiple separate units of authentication headers can be provided
-    for nonce synthesis. Here we assume that only one unit of AAD is sufficient,
-    which is practically true.
+    for the nonce synthesis. Here we assume that only one unit of AAD (aData) is
+    sufficient, which is practically true.
 
 * The key wrapping mode is also denoted by KW. In this mode, according to RFC-
     3394, the input secret-to-be-wrapped is divided into 64-bit blocks. Number

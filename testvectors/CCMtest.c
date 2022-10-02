@@ -2,7 +2,7 @@
 #include <string.h>
 #include "../micro_aes.h"
 
-#define TESTFILEPATH "XTSGenAES128.rsp"
+#define TESTFILEPATH "CCM_VNT128.rsp"
 
 static void str2bytes(const char* str, uint8_t* bytes)
 #define char2num(c)  (c > '9' ? (c & 7) + 9 : c & 0xF)
@@ -28,41 +28,40 @@ static void bytes2str(const uint8_t* bytes, char* str, size_t len)
     str[j] = 0;
 }
 
-static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* c, uint8_t n, char* r)
+static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* a, uint8_t* c, uint8_t np, uint8_t na, char* r)
 {
-    int false_negative = (n == 17 && (p[16] & 0x1F) == 0 && (c[16] & 0x1F) == 0);
-    char sk[70], si[40], sp[70], sc[70], msg[30];
-    uint8_t tmp[32], t = 0;
+    char sk[70], si[40], sp[70], sc[70], sa[70], msg[30];
+    uint8_t tmp[64], t = 0;
     sprintf(msg, "%s", "success");
 
-    AES_XTS_encrypt(key, iv, p, n, tmp);
-    if (memcmp(c, tmp, n) && !false_negative)
+    AES_CCM_encrypt(key, iv, p, np, a, na, tmp, tmp + np);
+    if (memcmp(c, tmp, np + CCM_TAG_LEN))
     {
         sprintf(msg, "%s", "encrypt failure");
         t = 1;
     }
     memset(tmp, 0xcc , sizeof tmp);
-    AES_XTS_decrypt(key, iv, c, n, tmp);
-    if (memcmp(p, tmp, n) && !false_negative)
+    t |= AES_CCM_decrypt(key, iv, c, np, a, na, c + np, CCM_TAG_LEN, tmp) ? 2 : 0;
+    if (t & 2)
     {
         sprintf(msg, "%sdecrypt failure", t ? "encrypt & " : "");
-        t |= 2;
     }
-    bytes2str(key, sk, 32);
-    bytes2str(iv, si, 16);
-    bytes2str(p, sp, n);
-    bytes2str(c, sc, n);
-    sprintf(r, "%s\nk: %s\ni: %s\np: %s\nc: %s", msg, sk, si, sp, sc);
+    bytes2str(key, sk, 16);
+    bytes2str(iv, si, CCM_NONCE_LEN);
+    bytes2str(p, sp, np);
+    bytes2str(a, sa, na);
+    bytes2str(c, sc, np);
+    sprintf(r, "%s\nK: %s\ni: %s\nP: %s\nA: %s\nC: %s", msg, sk, si, sp, sa, sc);
     return t;
 }
 
 int main()
 {
-    const char *linehdr[] = { "Key = ", "i = ", "PT = ", "CT = " };
+    const char *linehdr[] = { "Key = ", "Nonce = ", "Adata = ", "Payload = ", "CT = " };
     char buffer[0x800], *value = "";
-    int i, n = 0, pass = 0, df = 0, ef = 0;
-    uint8_t key[32], iv[16], p[32], c[32], s = 0;
     FILE *fp, *fs, *ferr;
+    int i, n = 0, pass = 0, df = 0, ef = 0, skip = 0;
+    uint8_t key[32], iv[16], p[64], c[80], a[64], sp = 0, sa = 0;
 
     fp = fopen(TESTFILEPATH, "r");
     fs = fopen("passed.log", "w");
@@ -79,7 +78,7 @@ int main()
     {
         buffer[strcspn(buffer, "\n")] = 0;
         if (strlen(buffer) < 4 || !strcspn(buffer, "=")) continue;
-        for (i = 0; i < 4; i++)
+        for (i = 0; i < 5; i++)
         {
             if (strncmp(buffer, linehdr[i], strlen(linehdr[i])) == 0)
             {
@@ -93,23 +92,28 @@ int main()
             str2bytes(value + 1, key);
             break;
         case 1:
+            skip = (strlen(value + 1) != 2 * CCM_NONCE_LEN);
             str2bytes(value + 1, iv);
             break;
         case 2:
-            s = strlen(value + 1) / 2;
-            str2bytes(value + 1, p);
-            ++n;
+            sa = strlen(value + 1) / 2;
+            str2bytes(value + 1, a);
             break;
         case 3:
+            if (!skip) ++n;
+            sp = strlen(value + 1) / 2;
+            str2bytes(value + 1, p);
+            break;
+        case 4:
+            if (!skip) ++n;
             str2bytes(value + 1, c);
-            ++n;
             break;
         default:
             continue;
         }
-        if (n == 2)
+        if (n == 2 && !skip)
         {
-            n = ciphertest(key, iv, p, c, s, buffer);
+            n = ciphertest(key, iv, p, a, c, sp, sa, buffer);
             if (n == 0)
             {
                 fprintf(fs, "%s\n", buffer);

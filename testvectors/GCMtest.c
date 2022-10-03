@@ -1,3 +1,13 @@
+/*
+ ==============================================================================
+ Name        : GCMtest.c
+ Author      : polfosol
+ Version     : 1.5.0.0
+ Copyright   : copyright © 2022 - polfosol
+ Description : illustrating how the NIST's vectors for AES-GCM mode are used
+ ==============================================================================
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include "../micro_aes.h"
@@ -31,7 +41,7 @@ static void bytes2str(const uint8_t* bytes, char* str, size_t len)
 static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* a, uint8_t* c,
                       uint8_t np, uint8_t na, uint8_t nt, char* r)
 {
-    char sk[40], si[40], sp[0x100], sc[0x100], sa[0x100], msg[30];
+    char sk[40], si[GCM_NONCE_LEN*2+6], sp[0x100], sc[0x100], sa[0x100], msg[30];
     uint8_t tmp[128], t = 0;
     sprintf(msg, "%s", "success");
 
@@ -60,9 +70,9 @@ int main()
 {
     const char *linehdr[] = { "Key = ", "IV = ", "AAD = ", "PT = ", "CT = ", "Tag = " };
     char buffer[0x800], *value = "";
+    size_t i, n = 0, pass = 0, df = 0, ef = 0, skip = 0, sp = 0, st = 0, sa = 0;
+    uint8_t key[16], iv[GCM_NONCE_LEN], p[96], c[112], a[96], t[16];
     FILE *fp, *fs, *ferr;
-    int i, n = 0, pass = 0, df = 0, ef = 0, skip = 0;
-    uint8_t key[16], iv[16], p[96], c[112], a[96], t[16], sp = 0, st = 0, sa = 0;
 
     fp = fopen(TESTFILEPATH, "r");
     fs = fopen("passed.log", "w");

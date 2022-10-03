@@ -1,3 +1,13 @@
+/*
+ ==============================================================================
+ Name        : CCMtest.c
+ Author      : polfosol
+ Version     : 1.5.0.0
+ Copyright   : copyright © 2022 - polfosol
+ Description : illustrating how the NIST's vectors for AES-CCM mode are used
+ ==============================================================================
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include "../micro_aes.h"
@@ -59,9 +69,9 @@ int main()
 {
     const char *linehdr[] = { "Key = ", "Nonce = ", "Adata = ", "Payload = ", "CT = " };
     char buffer[0x800], *value = "";
+    size_t i, n = 0, pass = 0, df = 0, ef = 0, skip = 0, sp = 0, sc = 0, sa = 0;
+    uint8_t key[16], iv[16], p[64], c[80], a[64];
     FILE *fp, *fs, *ferr;
-    int i, n = 0, pass = 0, df = 0, ef = 0, skip = 0;
-    uint8_t key[16], iv[16], p[64], c[80], a[64], sp = 0, sc = 0, sa = 0;
 
     fp = fopen(TESTFILEPATH, "r");
     fs = fopen("passed.log", "w");

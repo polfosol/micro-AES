@@ -1,10 +1,10 @@
 /*
  ==============================================================================
- Name        : XTStest.c
+ Name        : CMACtest.c
  Author      : polfosol
- Version     : 2.0.0.0
+ Version     : 1.1.0.0
  Copyright   : copyright © 2022 - polfosol
- Description : illustrating how the NIST's vectors for AES-XTS mode are used
+ Description : illustrating how the NIST's vectors for AES-CMAC are used
  ==============================================================================
  */
 
@@ -12,7 +12,7 @@
 #include <string.h>
 #include "../micro_aes.h"
 
-#define TESTFILEPATH "XTSGenAES128.rsp"
+#define TESTFILEPATH "CMACGenAES128.rsp"
 
 static void str2bytes(const char* str, uint8_t* bytes)
 #define char2num(c)  (c > '9' ? (c & 7) + 9 : c & 0xF)
@@ -38,40 +38,28 @@ static void bytes2str(const uint8_t* bytes, char* str, size_t len)
     str[j] = 0;
 }
 
-static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* c, uint8_t n, char* r)
+static int ciphertest(uint8_t* key, uint8_t* d, uint8_t* m, size_t ds, size_t ms, char* r)
 {
-    int false_negative = (n == 17 && (p[16] & 0x1F) == 0 && (c[16] & 0x1F) == 0);
-    char sk[80], si[40], sp[80], sc[80], msg[30];
+    char sk[40], smac[40], msg[30];
     uint8_t tmp[32], t = 0;
     sprintf(msg, "%s", "success");
 
-    AES_XTS_encrypt(key, iv, p, n, tmp);
-    if (memcmp(c, tmp, n) && !false_negative)
-    {
-        sprintf(msg, "%s", "encrypt failure");
-        t = 1;
-    }
-    memset(tmp, 0xcc , sizeof tmp);
-    AES_XTS_decrypt(key, iv, c, n, tmp);
-    if (memcmp(p, tmp, n) && !false_negative)
-    {
-        sprintf(msg, "%sdecrypt failure", t ? "encrypt & " : "");
-        t |= 2;
-    }
-    bytes2str(key, sk, 32);
-    bytes2str(iv, si, 16);
-    bytes2str(p, sp, n);
-    bytes2str(c, sc, n);
-    sprintf(r, "%s\nK: %s\ni: %s\nP: %s\nC: %s", msg, sk, si, sp, sc);
+    AES_CMAC(key, d, ds, tmp);
+    t = memcmp(m, tmp, ms);
+    if (t)  sprintf(msg, "%s", "failed");
+
+    bytes2str(key, sk, 16);
+    bytes2str(m, smac, ms);
+    sprintf(r, "%s\nK: %s\nmac: %s\n", msg, sk, smac);
     return t;
 }
 
 int main()
 {
-    const char *linehdr[] = { "Key = ", "i = ", "PT = ", "CT = " };
-    char buffer[0x800], *value = "";
-    size_t i, n = 0, pass = 0, df = 0, ef = 0, s = 0;
-    uint8_t key[32], iv[16], p[32], c[32];
+    const char *linehdr[] = { "Key = ", "Msg = ", "Mac = " };
+    char buffer[0x20100], *value = "";
+    size_t i, n = 0, pass = 0, nf = 0, sd = 0, sm = 0;
+    uint8_t key[32], d[0x10100], m[32];
     FILE *fp, *fs, *ferr;
 
     fp = fopen(TESTFILEPATH, "r");
@@ -89,7 +77,7 @@ int main()
     {
         buffer[strcspn(buffer, "\n")] = 0;
         if (strlen(buffer) < 4 || !strcspn(buffer, "=")) continue;
-        for (i = 0; i < 4; i++)
+        for (i = 0; i < 3; i++)
         {
             if (strncmp(buffer, linehdr[i], strlen(linehdr[i])) == 0)
             {
@@ -103,15 +91,14 @@ int main()
             str2bytes(value + 1, key);
             break;
         case 1:
-            str2bytes(value + 1, iv);
-            break;
-        case 2:
-            s = strlen(value + 1) / 2;
-            str2bytes(value + 1, p);
+            sd = strlen(value + 1) / 2;
+            str2bytes(value + 1, d);
+            if (sd == 1 && d[0] == 0) --sd;
             ++n;
             break;
-        case 3:
-            str2bytes(value + 1, c);
+        case 2:
+            sm = strlen(value + 1) / 2;
+            str2bytes(value + 1, m);
             ++n;
             break;
         default:
@@ -119,23 +106,21 @@ int main()
         }
         if (n == 2)
         {
-            n = ciphertest(key, iv, p, c, s, buffer);
+            n = ciphertest(key, d, m, sd, sm, buffer);
 
             fprintf(n ? ferr : fs, "%s\n", buffer); /* save the log */
             if (n == 0) ++pass;
             else
             {
-                if (n & 1) ++ef;
-                if (n & 2) ++df;
+                ++nf;
                 n = 0;
             }
         }
     }
-    printf ("test cases: %d\nsuccessful: %d\nfailed encrypt: %d, failed decrypt: %d\n",
-        pass + ef + df, pass, ef, df);
+    printf ("test cases: %d\nsuccessful: %d\nfailed: %d\n", pass + nf, pass, nf);
 
     fclose(fp); fclose(fs); fclose(ferr);
-    if (ef + df == 0)
+    if (nf == 0)
     {
         remove("passed.log"); remove("failed.log");
     }

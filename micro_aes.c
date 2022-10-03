@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.c
  Author      : polfosol
- Version     : 8.1.0.0
+ Version     : 8.7.0.0
  Copyright   : copyright © 2022 - polfosol
  Description : ANSI-C compatible implementation of µAES ™ library.
  ==============================================================================
@@ -580,35 +580,16 @@ static void MAC( const void* data, const size_T dataSize,
                  const block_t seed, fmix_t mix, block_t result )
 {
     const uint8_t *x = (const uint8_t*) data;
-    count_T n = dataSize / BLOCKSIZE;            /*  number of full blocks    */
+    count_T n = dataSize / BLOCKSIZE;            /*   number of full blocks   */
+
     while (n--)
     {
-        xorBlock( x, result );
-        mix( seed, result );                     /*  H_next = mix( seed ^ H ) */
-        x += BLOCKSIZE;                          /*  move on to next block    */
-    }
-                                                 /*  do the same with last    */
+        xorBlock( x, result );                   /* H_next = mix(seed, H ^ X) */
+        mix( seed, result );                     /* and move on to next block */
+        x += BLOCKSIZE;
+    }                                            /*  do the same to the last  */
     n = dataSize % BLOCKSIZE;                    /*  ..partial block (if any) */
     if (n)  xorThenMix( x, n, seed, mix, result );
-}
-#endif
-
-#if SIV || EAX
-
-/** calculate the CMAC hash of input data using pre-calculated keys: D and Q. */
-static void CMAC( const block_t D, const block_t Q,
-                  const uint8_t* data, const size_T dataSize, block_t mac )
-{
-    uint8_t r, M[BLOCKSIZE] = { 0 };
-    if (dataSize == 0)  return;
-
-    r = (dataSize - 1) % BLOCKSIZE + 1;
-    memcpy( M, data + dataSize - r, r );         /*  copy last block into M   */
-    xorBlock( r < sizeof M ? Q : D, M );         /*  ..and pad( M; D, Q )     */
-    if (r < sizeof M)  M[r] ^= 0x80;
-
-    MAC( data, dataSize - r, mac, &RijndaelEncrypt, mac );
-    xorThenMix( M, sizeof M, mac, &RijndaelEncrypt, mac );
 }
 #endif
 
@@ -1092,33 +1073,89 @@ char AES_XTS_decrypt( const uint8_t* keys, const uint8_t* twkId,
 
 
 /**--------------------------------------------------------------------------**\
+    AES-CMAC (cipher-based message authentication code): main functions
+\*----------------------------------------------------------------------------*/
+#if IMPLEMENT(CMAC)
+
+/** calculate key-dependent constants D and Q for CMAC, regarding endianness: */
+static void GetSubkeys( const uint8_t* key, const int LE, block_t D, block_t Q )
+{
+    AES_SetKey( key );
+    RijndaelEncrypt( D, D );                     /*  H or L_* = Enc(zeros)    */
+    if (LE)                                      /*  little endian!           */
+    {
+#if EAXP
+        doubleGf128L( D );                       /*  D or L_$ = double(L_*)   */
+        memcpy( Q, D, BLOCKSIZE );
+        doubleGf128L( Q );                       /*  Q or L_0 = double(L_$)   */
+        return;
+#endif
+    }
+#if SIV || !EAXP
+    doubleGf128B( D );
+    memcpy( Q, D, BLOCKSIZE );
+    doubleGf128B( Q );
+#endif
+}
+
+/** calculate the CMAC hash of input data using pre-calculated keys: D and Q. */
+static void Cmac( const block_t D, const block_t Q,
+                  const void* data, const size_T dataSize, block_t mac )
+{
+    block_t M = { 0 };
+    uint8_t r = dataSize ? (dataSize - 1) % BLOCKSIZE + 1 : 0;
+    const void *last = (const char*) data + dataSize - r;
+
+    if (r < BLOCKSIZE)  M[r] = 0x80;
+    memcpy( M, last, r );                        /*  copy last block into M   */
+    xorBlock( r < BLOCKSIZE ? Q : D, M );        /*  ..and pad( M; D, Q )     */
+
+    MAC( data, dataSize - r, mac, &RijndaelEncrypt, mac );
+    xorThenMix( M, sizeof M, mac, &RijndaelEncrypt, mac );
+}
+
+/**
+ * @brief   derive the CMAC hash of input data with a given encryption key
+ * @param   key       AES-128 encryption key
+ * @param   data      buffer of input data
+ * @param   dataSize  size of data in bytes
+ * @param   mac       calculated CMAC hash; must be pre-initialized
+ */
+void AES_CMAC( const uint8_t* key,
+               const void* data, const size_T dataSize, block_t mac )
+{
+    block_t D = { 0 }, Q;
+    GetSubkeys( key, 0, D, Q );
+    Cmac( D, Q, data, dataSize, mac );
+}
+#endif /* CMAC */
+
+
+/**--------------------------------------------------------------------------**\
     GCM-AES (Galois counter mode): authentication with GMAC & main functions
 \*----------------------------------------------------------------------------*/
 #if IMPLEMENT(GCM)
 
-/** this function calculates GMAC hash of ciphertext and authentication data. */
-static void GHash( const uint8_t* ctext, const uint8_t* adata,
+/** calculates GMAC hash of ciphertext and AAD using authentication subkey AK */
+static void GHash( const block_t AK, const uint8_t* ctext, const uint8_t* adata,
                    const size_T ctextLen, const size_T adataLen, block_t hash )
 {
-    block_t authKey = { 0 }, L = { 0 };
-
-    /* encrypt 128-bit block of 0s to generate the authentication sub-key H:  */
-    RijndaelEncrypt( authKey, authKey );
+    block_t bitLen = { 0 };
 
     /* digest and process additional data and ciphertext into GHash function: */
-    MAC( adata, adataLen, authKey, &MulGf128, hash );
-    MAC( ctext, ctextLen, authKey, &MulGf128, hash );
+    MAC( adata, adataLen, AK, &MulGf128, hash );
+    MAC( ctext, ctextLen, AK, &MulGf128, hash );
 
-    /* copy length info (bit-length) of hashed data into L, then get its GMAC */
-    putValueB( L, BLOCKSIZE - 9,  adataLen * 8 );
-    putValueB( L, BLOCKSIZE - 1,  ctextLen * 8 );
-    MAC( L, sizeof L, authKey, &MulGf128, hash );
+    /* copy length info (bit-length) of hashed data into bitLen, then GMAC .. */
+    putValueB( bitLen, BLOCKSIZE - 9,  adataLen * 8 );
+    putValueB( bitLen, BLOCKSIZE - 1,  ctextLen * 8 );
+    MAC( bitLen, sizeof bitLen, AK, &MulGf128, hash );
 }
 
 /**
  * @brief   encrypt the input plaintext using GCM-AES block-cipher method
  * @param   key       encryption key with a fixed size specified by KEYSIZE
- * @param   iv        initialization vector a.k.a. nonce
+ * @param   iv        initialization vector a.k.a nonce. has GCM_NONCE_LEN bytes
  * @param   pText     input plain-text buffer
  * @param   pTextLen  size of input buffer
  * @param   aData     additional authentication data
@@ -1131,19 +1168,20 @@ void AES_GCM_encrypt( const uint8_t* key, const uint8_t* iv,
                       const uint8_t* aData, const size_T aDataLen,
                       uint8_t* cText, block_t auTag )
 {
-    block_t H = { 0 };
-    AES_SetKey( key );                           /* encrypt and then get tag: */
-    CTR_Cipher( iv, 2, pText, pTextLen, cText );
+    block_t GH = { 0 }, authKey = { 0 };
+    AES_SetKey( key );                           /* encrypt zero block to get */
+    RijndaelEncrypt( authKey, authKey );         /* authentication sub-key H  */
 
-    GHash( cText, aData, pTextLen, aDataLen, H );
-    CTR_Cipher( iv, 1, H, sizeof H, auTag );
+    CTR_Cipher( iv, 2, pText, pTextLen, cText );
+    GHash( authKey, cText, aData, pTextLen, aDataLen, GH );
+    CTR_Cipher( iv, 1, GH, sizeof GH, auTag );   /* encrypt and calculate tag */
     BURN_AFTER_READ
 }
 
 /**
  * @brief   decrypt the input ciphertext using GCM-AES block-cipher method
  * @param   key       decryption key with a fixed size specified by KEYSIZE
- * @param   iv        initialization vector a.k.a. nonce
+ * @param   iv        initialization vector a.k.a nonce. has GCM_NONCE_LEN bytes
  * @param   cText     input cipher-text buffer
  * @param   cTextLen  size of input buffer
  * @param   aData     additional authentication data
@@ -1159,12 +1197,14 @@ char AES_GCM_decrypt( const uint8_t* key, const uint8_t* iv,
                       const uint8_t* auTag, const uint8_t tagSize,
                       uint8_t* pText )
 {
-    block_t H = { 0 }, tag;
-    AES_SetKey( key );
-    GHash( cText, aData, cTextLen, aDataLen, H );
-    CTR_Cipher( iv, 1, H, sizeof H, tag );
+    block_t GH = { 0 }, AK = { 0 };
+    AES_SetKey( key );                           /* encrypt zero block to get */
+    RijndaelEncrypt( AK, AK );                   /* authentication sub-key H  */
 
-    if (memcmp( tag, auTag, tagSize ) != 0)      /*  compare tags and proceed */
+    GHash( AK, cText, aData, cTextLen, aDataLen, GH );
+    CTR_Cipher( iv, 1, GH, sizeof GH, AK );      /*  save the tag into AK!    */
+
+    if (memcmp( AK, auTag, tagSize ) != 0)       /*  compare tags and proceed */
     {                                            /*  ..if they match.         */
         BURN_AFTER_READ
         return AUTHENTICATION_FAILURE;
@@ -1188,7 +1228,7 @@ static void CCM_GetTag( const block_t iv,
                         const size_T pTextLen, const size_T aDataLen,
                         block_t tag )
 {
-    block_t S = { 0 }, B = { 0 };
+    block_t S = { 0 }, A = { 0 };
     uint8_t p, m = BLOCKSIZE - 2;
 
     memcpy( S, iv, CCM_NONCE_LEN + 1 );
@@ -1200,16 +1240,16 @@ static void CCM_GetTag( const block_t iv,
     {
         if (aDataLen < m)  m = aDataLen;
         p = aDataLen < 0xFF00 ? 1 : 5;
-        putValueB( B, p, aDataLen );
+        putValueB( A, p, aDataLen );             /*  len_id = aDataLen (B.E.) */
         if (p == 5)
         {
             m -= 4;
-            putValueB( B, 1, 0xFFFE );           /*  long length identifier   */
+            putValueB( A, 1, 0xFFFE );           /*  prepend FFFE to len_id   */
         }
-        memcpy( B + p + 1, aData, m );           /*  B = length_tag || ADATA  */
+        memcpy( A + p + 1, aData, m );           /*  A = len_id || ADATA      */
         S[0] |= 0x40;
-        RijndaelEncrypt( S, S );                 /*  S_1 = Enc(S_0) ^ B       */
-        xorBlock( B, S );
+        RijndaelEncrypt( S, S );                 /*  S_1 = Enc(S_0) ^ A       */
+        xorBlock( A, S );
     }
     RijndaelEncrypt( S, S );                     /*  S_2 = Enc(S_1)           */
 
@@ -1224,7 +1264,7 @@ static void CCM_GetTag( const block_t iv,
 /**
  * @brief   encrypt the input plaintext using CCM-AES block-cipher method
  * @param   key       encryption key with a fixed size specified by KEYSIZE
- * @param   iVec      init-vector a.k.a nonce, with a fixed size: CCM_NONCE_LEN
+ * @param   iVec      init-vector a.k.a nonce, containing CCM_NONCE_LEN bytes
  * @param   pText     input plain-text buffer
  * @param   pTextLen  size of input buffer
  * @param   aData     additional authentication data
@@ -1250,7 +1290,7 @@ void AES_CCM_encrypt( const uint8_t* key, const uint8_t* iVec,
 /**
  * @brief   decrypt the input ciphertext using CCM-AES block-cipher method
  * @param   key       decryption key with a fixed size specified by KEYSIZE
- * @param   iVec      init-vector a.k.a nonce, with a fixed size: CCM_NONCE_LEN
+ * @param   iVec      init-vector a.k.a nonce, containing CCM_NONCE_LEN bytes
  * @param   cText     input cipher-text buffer
  * @param   cTextLen  size of input buffer
  * @param   aData     additional authentication data
@@ -1288,44 +1328,34 @@ char AES_CCM_decrypt( const uint8_t* key, const uint8_t* iVec,
        SIV-AES (synthetic init-vector): nonce synthesis & main functions
 \*----------------------------------------------------------------------------*/
 #if IMPLEMENT(SIV)
-/**
- * @brief   calculates the CMAC* of authentication data and synthesizes the I.V
- * @param   key       first block of the provided key-pair with KEYSIZE bytes
- * @param   aData     additional authentication data
- * @param   pLast     last (possibly partial) block of the plain-text
- * @param   aDataLen  size of additional authentication data
- * @param   pLastLen  size of the last plaintext block
- * @param   V         result of CMAC*, i.e. synthesized nonce
- */
+
+/** calculate the CMAC* of AAD unit(s), then plaintext, and synthesize the IV */
 static void S2V( const uint8_t* key,
-                 const uint8_t* aData, const uint8_t* pLast,
-                 const size_T aDataLen, const uint8_t pLastLen, block_t V )
+                 const uint8_t* aData, const uint8_t* pText,
+                 const size_T aDataLen, const size_T pTextLen, block_t V )
 {
     block_t T = { 0 }, D = { 0 }, Q;
-    uint8_t i;
+    uint8_t r = pTextLen >= BLOCKSIZE ? BLOCKSIZE : pTextLen % BLOCKSIZE;
+    const uint8_t *p = pText + pTextLen - r;
 
-    AES_SetKey( key );
-    RijndaelEncrypt( D, D );                     /*  L_* = encrypt(zero)      */
-    doubleGf128B( D );                           /*  L_$ or D = double(L_*)   */
-    memcpy( Q, D, sizeof D );
-    doubleGf128B( Q );                           /*  L_0 or Q = double(L_$)   */
-
-    CMAC( D, Q, T, sizeof T, T );                /*  T_0 = CMAC(zero block)   */
-    doubleGf128B( T );
-    CMAC( D, Q, aData, aDataLen, V );            /*  C_A = CMAC(ADATA)        */
-    xorBlock( V, T );                            /*  T_1 = double(T_0) ^ C_A  */
-    memset( V, 0, BLOCKSIZE );
-    if (pLastLen < BLOCKSIZE)                    /*  pad the plaintext block  */
+    GetSubkeys( key, 0, D, Q );
+    Cmac( D, Q, T, sizeof T, T );                /*  T_0 = CMAC(zero block)   */
+    if (aDataLen)                                /*  process each ADATA unit  */
+    {                                            /*  ..the same was as this:  */
+        doubleGf128B( T );
+        Cmac( D, Q, aData, aDataLen, V );        /*  C_A = CMAC(ADATA)        */
+        xorBlock( V, T );                        /*  T_1 = double(T_0) ^ C_A  */
+        memset( V, 0, BLOCKSIZE );
+    }
+    if (r < BLOCKSIZE)
     {
         doubleGf128B( T );
-        for (i = 0; i < pLastLen; ++i)  T[i] ^= pLast[i];
-        T[i] ^= 0x80;
+        T[r] ^= 0x80;                            /*  T = double(T_n) ^ pad(X) */
+        while (r--)  T[r] ^= p[r];
     }
-    else if (pLastLen)
-    {
-        xorBlock( pLast, T );                    /*  T = T_n  xor_end  pText  */
-    }
-    CMAC( D, Q, T, sizeof T, V );                /*  I.V = CMAC*(T)           */
+    else  xorBlock( p, T );                      /*  T = T_n  xor_end  X      */
+
+    Cmac( D, Q, T, sizeof T, V );                /*  I.V = CMAC*(T)           */
 }
 
 /**
@@ -1344,11 +1374,9 @@ void AES_SIV_encrypt( const uint8_t* keys,
                       block_t iv, uint8_t* cText )
 {
     block_t IV = { 0 };
-    uint8_t r = pTextLen ? (pTextLen - 1) % BLOCKSIZE + 1 : 0;
-
-    S2V( keys, aData, pText + pTextLen - r, aDataLen, r, IV );
+    S2V( keys, aData, pText, aDataLen, pTextLen, IV );
     memcpy( iv, IV, sizeof IV );
-    IV[8] &= 0x7F;  IV[12] &= 0x7F;              /*  clear two bits           */
+    IV[8] &= 0x7F;  IV[12] &= 0x7F;
 
     AES_SetKey( keys + KEYSIZE );
     CTR_Cipher( IV, ~0, pText, pTextLen, cText );
@@ -1372,15 +1400,13 @@ char AES_SIV_decrypt( const uint8_t* keys,
                       const block_t iv, uint8_t* pText )
 {
     block_t IV;
-    uint8_t r = cTextLen ? (cTextLen - 1) % BLOCKSIZE + 1 : 0;
-
     AES_SetKey( keys + KEYSIZE );
     memcpy( IV, iv, sizeof IV );
     IV[8] &= 0x7F;  IV[12] &= 0x7F;
 
     CTR_Cipher( IV, ~0, cText, cTextLen, pText );
     memset( IV, 0, sizeof IV );
-    S2V( keys, aData, pText + cTextLen - r, aDataLen, r, IV );
+    S2V( keys, aData, pText, aDataLen, cTextLen, IV );
     BURN_AFTER_READ
 
     if (memcmp( iv, IV, sizeof IV ) != 0)        /* sabotage results ↓ maybe? */
@@ -1397,29 +1423,13 @@ char AES_SIV_decrypt( const uint8_t* keys,
 \*----------------------------------------------------------------------------*/
 #if IMPLEMENT(EAX)
 
-/** calculate the key-dependent constants D (a.k.a: L_$) and Q (a.k.a: L_0).. */
-static void GetDQ( const uint8_t* key, block_t Ld, block_t L0 )
-{
-    AES_SetKey( key );
-    RijndaelEncrypt( Ld, Ld );                   /*  L_* = Enc(zero block)    */
-#if EAXP
-    doubleGf128L( Ld );                          /*  D or L_$ = double(L_*)   */
-    memcpy( L0, Ld, BLOCKSIZE );
-    doubleGf128L( L0 );                          /*  Q or L_0 = double(L_$)   */
-#else
-    doubleGf128B( Ld );                          /*  big endian!              */
-    memcpy( L0, Ld, BLOCKSIZE );
-    doubleGf128B( L0 );
-#endif
-}
-
 /** this function calculates the OMAC hash of a data array using D (Ld) and Q */
-static void OMAC( const uint8_t t, const block_t D, const block_t Q,
-                  const uint8_t* data, const size_T dataSize, block_t omac )
+static void Omac( const uint8_t t, const block_t D, const block_t Q,
+                  const void* data, const size_T dataSize, block_t mac )
 {
 #if EAXP
     if (dataSize == 0)  return;
-    memcpy( omac, t ? Q : D, BLOCKSIZE );
+    memcpy( mac, t ? Q : D, BLOCKSIZE );
 #else
     block_t M = { 0 };
     if (dataSize == 0)
@@ -1427,15 +1437,15 @@ static void OMAC( const uint8_t t, const block_t D, const block_t Q,
         memcpy( M, D, sizeof M );                /*  OMAC = Enc( D ^ [t]_n )  */
     }
     M[BLOCKSIZE - 1] ^= t;                       /*  else: C1 = Enc( [t]_n )  */
-    RijndaelEncrypt( M, omac );
+    RijndaelEncrypt( M, mac );
 #endif
-    CMAC( D, Q, data, dataSize, omac );
+    Cmac( D, Q, data, dataSize, mac );
 }
 
 /**
  * @brief   encrypt the input plaintext using EAX-AES block-cipher method
  * @param   key       encryption key with a fixed size specified by KEYSIZE
- * @param   nonce     a.k.a init-vector with arbitrary number of bytes
+ * @param   nonce     a.k.a init-vector with EAX_NONCE_LEN bytes if not EAX'
  * @param   pText     input plain-text buffer
  * @param   pTextLen  size of input buffer
  * @param   nonceLen  size of the nonce byte array; MUST be non-zero in EAX'
@@ -1454,28 +1464,28 @@ void AES_EAX_encrypt( const uint8_t* key, const uint8_t* nonce,
                       uint8_t* cText, uint8_t* auTag )
 {
     block_t mac, tag = { 0 }, Ld = { 0 }, Lq;
-    GetDQ( key, Ld, Lq );
+    GetSubkeys( key, EAXP, Ld, Lq );
 
 #if EAXP
-    OMAC( 0, Ld, Lq, nonce, nonceLen, mac );     /*  N = CMAC'( nonce )       */
+    Omac( 0, Ld, Lq, nonce, nonceLen, mac );     /*  N = CMAC'( nonce )       */
     memcpy( auTag, mac + 12, 4 );
     mac[12] &= 0x7F;                             /*  clear 2 bits to get N'   */
     mac[14] &= 0x7F;
     CTR_Cipher( mac, ~0, pText, pTextLen, cText );
 
-    OMAC( 2, Ld, Lq, cText, pTextLen, tag );     /*  C' = CMAC'( ciphertext ) */
+    Omac( 2, Ld, Lq, cText, pTextLen, tag );     /*  C' = CMAC'( ciphertext ) */
     for (*Ld = 0; *Ld < 4; ++*Ld)                /*  using Ld[0] as counter!  */
     {
         auTag[*Ld] ^= tag[12 + *Ld];             /*  last 4 bytes of C' ^ N'  */
     }
 #else
-    OMAC( 0, Ld, Lq, nonce, EAX_NONCE_LEN, mac );
-    OMAC( 1, Ld, Lq, aData, aDataLen, tag );     /*  H = OMAC(1; adata)       */
+    Omac( 0, Ld, Lq, nonce, EAX_NONCE_LEN, mac );
+    Omac( 1, Ld, Lq, aData, aDataLen, tag );     /*  H = OMAC(1; adata)       */
     xorBlock( mac, tag );                        /*  N = OMAC(0; nonce)       */
     memcpy( auTag, tag, sizeof tag );
     CTR_Cipher( mac, ~0, pText, pTextLen, cText );
 
-    OMAC( 2, Ld, Lq, cText, pTextLen, mac );     /*  C = OMAC(2; ciphertext)  */
+    Omac( 2, Ld, Lq, cText, pTextLen, mac );     /*  C = OMAC(2; ciphertext)  */
     xorBlock( mac, auTag );                      /*  tag = N ^ H ^ C          */
 #endif
     BURN_AFTER_READ
@@ -1484,7 +1494,7 @@ void AES_EAX_encrypt( const uint8_t* key, const uint8_t* nonce,
 /**
  * @brief   decrypt the input ciphertext using EAX-AES block-cipher method
  * @param   key       decryption key with a fixed size specified by KEYSIZE
- * @param   nonce     a.k.a init-vector with arbitrary number of bytes
+ * @param   nonce     a.k.a init-vector with EAX_NONCE_LEN bytes if not EAX'
  * @param   cText     input cipher-text buffer; +4 bytes tag at the end in EAX'
  * @param   cTextLen  size of input buffer; excluding added 4 bytes in EAX'
  * @param   nonceLen  size of the nonce byte array; MUST be non-zero in EAX'
@@ -1506,11 +1516,11 @@ char AES_EAX_decrypt( const uint8_t* key, const uint8_t* nonce,
                       uint8_t* pText )
 {
     block_t mac, tag = { 0 }, Ld = { 0 }, Lq;
-    GetDQ( key, Ld, Lq );
-    OMAC( 2, Ld, Lq, cText, cTextLen, tag );     /*  C = OMAC(2; ciphertext)  */
+    GetSubkeys( key, EAXP, Ld, Lq );
+    Omac( 2, Ld, Lq, cText, cTextLen, tag );     /*  C = OMAC(2; ciphertext)  */
 
 #if EAXP
-    OMAC( 0, Ld, Lq, nonce, nonceLen, mac );     /*  N = CMAC'( nonce )       */
+    Omac( 0, Ld, Lq, nonce, nonceLen, mac );     /*  N = CMAC'( nonce )       */
     for (*Lq = *Ld = 0; *Ld < 4; ++*Ld)          /* authenticate/compare tags */
     {
         *Lq |= tag[12 + *Ld] ^ mac[12 + *Ld] ^ cText[cTextLen + *Ld];
@@ -1519,9 +1529,9 @@ char AES_EAX_decrypt( const uint8_t* key, const uint8_t* nonce,
     mac[14] &= 0x7F;                             /*  clear 2 bits to get N'   */
     if (*Lq != 0)
 #else
-    OMAC( 1, Ld, Lq, aData, aDataLen, mac );     /*  H = OMAC(1; adata)       */
+    Omac( 1, Ld, Lq, aData, aDataLen, mac );     /*  H = OMAC(1; adata)       */
     xorBlock( mac, tag );                        /*  N = OMAC(0; nonce)       */
-    OMAC( 0, Ld, Lq, nonce, EAX_NONCE_LEN, mac );
+    Omac( 0, Ld, Lq, nonce, EAX_NONCE_LEN, mac );
     xorBlock( mac, tag );                        /*  tag = N ^ H ^ C          */
 
     if (memcmp( tag, auTag, tagSize ) != 0)      /* authenticate then decrypt */

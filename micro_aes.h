@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.h
  Author      : polfosol
- Version     : 8.1.0.0
+ Version     : 8.7.0.0
  Copyright   : copyright © 2022 - polfosol
  Description : μAES ™ is a minimalist all-in-one library for AES encryption
  ==============================================================================
@@ -15,13 +15,13 @@
 You can use different AES algorithms by changing this macro. Default is AES-128
  -----------------------------------------------------------------------------*/
 #define AES___  128        /* or 256 (or 192; not standardized in some modes) */
-#define BLOCK_CIPHERS_MODES 1
+#define BLOCK_CIPHER_MODES 1
 
 /**----------------------------------------------------------------------------
 AES block-cipher modes of operation. The following modes can be enabled/disabled
  by setting their corresponding macros to TRUE (1) or FALSE (0).
  -----------------------------------------------------------------------------*/
-#if BLOCK_CIPHERS_MODES
+#if BLOCK_CIPHER_MODES
 #define ECB       1        /* electronic code-book (NIST SP 800-38A)          */
 #define CBC       1        /* cipher block chaining (NIST SP 800-38A)         */
 #define CFB       1        /* cipher feedback (NIST SP 800-38A)               */
@@ -54,6 +54,10 @@ AES block-cipher modes of operation. The following modes can be enabled/disabled
 #define EAXP      0        /* EAX-prime, as specified by IEEE Std 1703        */
 #endif
 
+#if SIV || EAX
+#define CMAC      1        /* message authentication code (NIST SP 800-38B)   */
+#endif
+
 #if CCM || GCM || EAX || OCB || SIV || GCM_SIV
 #define AEAD_MODES         /* authenticated encryption with associated data.  */
 #endif
@@ -66,7 +70,7 @@ AES block-cipher modes of operation. The following modes can be enabled/disabled
 REFER TO THE BOTTOM OF THIS DOCUMENT FOR SOME EXPLANATIONS ABOUT THESE MACROS:
  -----------------------------------------------------------------------------*/
 
-#if ECB || CBC || XEX || KWA || !BLOCK_CIPHERS_MODES
+#if ECB || CBC || XEX || KWA || !BLOCK_CIPHER_MODES
 #define DECRYPTION     1
 #endif
 
@@ -122,7 +126,7 @@ extern "C" {
 /**----------------------------------------------------------------------------
 Encryption/decryption of a single block with Rijndael
  -----------------------------------------------------------------------------*/
-#if !BLOCK_CIPHERS_MODES
+#if !BLOCK_CIPHER_MODES
 void AES_Cipher( const uint8_t* key,          /* encryption/decryption key    */
                  const char mode,             /* encrypt: 'E', decrypt: 'D'   */
                  const uint8_t* x,            /* input block byte array       */
@@ -228,6 +232,16 @@ void AES_CTR_decrypt( const uint8_t* key,     /* decryption key               */
                       const size_T cTextLen,  /* length of input cipher-text  */
                       uint8_t* pText );       /* decrypted plain-text         */
 #endif /* CTR */
+
+/**----------------------------------------------------------------------------
+Main function for AES-128 cipher-based message authentication code
+ -----------------------------------------------------------------------------*/
+#if CMAC
+void AES_CMAC( const uint8_t* key,            /* 128-bit encryption key       */
+               const void* data,              /* input data buffer            */
+               const size_T dataSize,         /* size of data in bytes        */
+               uint8_t* mac );                /* calculated CMAC hash         */
+#endif
 
 /**----------------------------------------------------------------------------
 Main functions for SIV-AES block ciphering

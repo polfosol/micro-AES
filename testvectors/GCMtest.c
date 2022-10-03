@@ -2,7 +2,7 @@
 #include <string.h>
 #include "../micro_aes.h"
 
-#define TESTFILEPATH "gcmEncryptExtIV128.rsp"
+#define TESTFILEPATH "GCM_EncryptExtIV128.rsp"
 
 static void str2bytes(const char* str, uint8_t* bytes)
 #define char2num(c)  (c > '9' ? (c & 7) + 9 : c & 0xF)
@@ -110,13 +110,14 @@ int main()
             str2bytes(value + 1, c);
             break;
         case 5:
+            if (!skip) ++n;
             st = strlen(value + 1) / 2;
             str2bytes(value + 1, t);
             break;
         default:
             continue;
         }
-        if (n == 2)
+        if (n == 3)
         {
             memcpy(c + sp, t, st); /* put tag at the end */
             n = skip ? 0 : ciphertest(key, iv, p, a, c, sp, sa, st, buffer);

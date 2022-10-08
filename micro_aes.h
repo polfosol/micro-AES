@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.h
  Author      : polfosol
- Version     : 8.9.0.0
+ Version     : 8.9.5.0
  Copyright   : copyright © 2022 - polfosol
  Description : μAES ™ is a minimalist all-in-one library for AES encryption
  ==============================================================================
@@ -10,68 +10,76 @@
 
 #ifndef _MICRO__AES_
 #define _MICRO__AES_
+#include <string.h>
 
 /**----------------------------------------------------------------------------
 You can use different AES algorithms by changing this macro. Default is AES-128
  -----------------------------------------------------------------------------*/
-#define AES___  128        /* or 256 (or 192; not standardized in some modes) */
-#define BLOCK_CIPHER_MODES 1
+#define AES___    128      /* or 256 (or 192; not standardized in some modes) */
 
 /**----------------------------------------------------------------------------
 AES block-cipher modes of operation. The following modes can be enabled/disabled
  by setting their corresponding macros to TRUE (1) or FALSE (0).
  -----------------------------------------------------------------------------*/
+#define BLOCK_CIPHER_MODES  1
+#define AEAD_MODES  1      /* authenticated encryption with associated data.  */
+
 #if BLOCK_CIPHER_MODES
-#define ECB       1        /* electronic code-book (NIST SP 800-38A)          */
-#define CBC       1        /* cipher block chaining (NIST SP 800-38A)         */
-#define CFB       1        /* cipher feedback (NIST SP 800-38A)               */
-#define OFB       1        /* output feedback (NIST SP 800-38A)               */
-#define CTR       1        /* counter-block (NIST SP 800-38A)                 */
-#define XEX       1        /* xor-encrypt-xor (NIST SP 800-38E)               */
-#define KWA       1        /* key wrap with authentication (NIST SP 800-38F)  */
-#define FPE       0        /* format-preserving encryption (NIST SP 800-38G)  */
+#define ECB         1      /* electronic code-book (NIST SP 800-38A)          */
+#define CBC         1      /* cipher block chaining (NIST SP 800-38A)         */
+#define CFB         1      /* cipher feedback (NIST SP 800-38A)               */
+#define OFB         1      /* output feedback (NIST SP 800-38A)               */
+#define CTR         1      /* counter-block (NIST SP 800-38A)                 */
+#define XEX         1      /* xor-encrypt-xor (NIST SP 800-38E)               */
+#define KWA         1      /* key wrap with authentication (NIST SP 800-38F)  */
+#define FPE         0      /* format-preserving encryption (NIST SP 800-38G)  */
 #endif
 
+#if AEAD_MODES
 #if CTR
-#define CTR_NA    1        /* pure counter mode, with no authentication       */
-#define CCM       1        /* counter with CBC-MAC (RFC-3610 & SP 800-38C)    */
-#define GCM       1        /* Galois/counter mode with GMAC (NIST SP 800-38D) */
-#define EAX       1        /* encrypt-authenticate-translate (ANSI C12.22)    */
-#define SIV       1        /* synthetic initialization vector (RFC-5297)      */
-#define GCM_SIV   1        /* nonce misuse-resistant AES-GCM (RFC-8452)       */
-#endif
-
-#if CBC
-#define CTS       1        /* ciphertext stealing (CS3: unconditional swap)   */
+#define CCM         1      /* counter with CBC-MAC (RFC-3610 & SP 800-38C)    */
+#define GCM         1      /* Galois/counter mode with GMAC (NIST SP 800-38D) */
+#define EAX         1      /* encrypt-authenticate-translate (ANSI C12.22)    */
+#define SIV         1      /* synthetic initialization vector (RFC-5297)      */
+#define GCM_SIV     1      /* nonce misuse-resistant AES-GCM (RFC-8452)       */
 #endif
 
 #if XEX
-#define XTS       1        /* XEX tweaked-codebook with ciphertext stealing   */
-#define OCB       1        /* offset codebook mode (RFC-7253)                 */
+#define OCB         1      /* offset codebook mode (RFC-7253)                 */
+#endif
+
+#define CMAC        1      /* message authentication code (NIST SP 800-38B)   */
+#endif
+
+#if CBC
+#define CTS         1      /* ciphertext stealing (CS3: unconditional swap)   */
+#endif
+
+#if XEX
+#define XTS         1      /* XEX tweaked-codebook with ciphertext stealing   */
+#endif
+
+#if CTR
+#define CTR_NA      1      /* pure counter mode, with no authentication       */
 #endif
 
 #if EAX
-#define EAXP      0        /* EAX-prime, as specified by IEEE Std 1703        */
+#define EAXP        0      /* EAX-prime, as specified by IEEE Std 1703        */
 #endif
 
-#if EAX || SIV
-#define CMAC      1        /* message authentication code (NIST SP 800-38B)   */
-#endif
+#define WTF! (BLOCK_CIPHER_MODES || CMAC)
+#define MICRO_RJNDL WTF    /* none of above; just rijndael API. dude.., why?  */
 
-#if CCM || GCM || EAX || OCB || SIV || GCM_SIV
-#define AEAD_MODES         /* authenticated encryption with associated data.  */
+/**----------------------------------------------------------------------------
+Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
+ -----------------------------------------------------------------------------*/
+
+#if ECB || CBC || XEX || KWA || MICRO_RJNDL
+#define DECRYPTION     1
 #endif
 
 #if CFB || OFB || CTR || OCB
-#define PARTIAL_BLOCK_PASS /* supports data units shorter than a full block.  */
-#endif
-
-/**----------------------------------------------------------------------------
-REFER TO THE BOTTOM OF THIS DOCUMENT FOR SOME EXPLANATIONS ABOUT THESE MACROS:
- -----------------------------------------------------------------------------*/
-
-#if ECB || CBC || XEX || KWA || !BLOCK_CIPHER_MODES
-#define DECRYPTION     1
+#define TAKE_PARTIAL_DATA  /* supports data units shorter than a full block.  */
 #endif
 
 #if ECB || (CBC && !CTS) || (XEX && !XTS)
@@ -101,23 +109,11 @@ REFER TO THE BOTTOM OF THIS DOCUMENT FOR SOME EXPLANATIONS ABOUT THESE MACROS:
 #endif
 
 /**----------------------------------------------------------------------------
-If the length of the input cipher/plain text is 'always' less than 4KB, you can
- enable this macro to save a few bytes in the compiled code. Which would be a
- valid assumption for some embedded systems and small applications.
- !>> Note: for key-wrapping, this limit is 42 blocks (336 bytes) of secret key.
+Since stdint.h is not a part of ANSI-C, we used a 'trick' that should not cause
+ any problems. You may replace the following two lines by: #include <stdint.h>
  -----------------------------------------------------------------------------*/
-#define SMALL_CIPHER   0
-
-#include <stddef.h>
-#if SMALL_CIPHER
-typedef unsigned char count_t;
-#else
-typedef size_t  count_t;
-#endif
-
-typedef unsigned char uint8_T;
-#define uint8_t uint8_T                       /* C89 doesn't have  <stdint.h> */
-
+typedef unsigned char  uint8_T;
+#define uint8_t  uint8_T
 
 #ifdef __cplusplus
 extern "C" {
@@ -126,7 +122,7 @@ extern "C" {
 /**----------------------------------------------------------------------------
 Encryption/decryption of a single block with Rijndael
  -----------------------------------------------------------------------------*/
-#if !BLOCK_CIPHER_MODES
+#if MICRO_RJNDL
 void AES_Cipher( const uint8_t* key,          /* encryption/decryption key    */
                  const char mode,             /* encrypt: 'E', decrypt: 'D'   */
                  const uint8_t* x,            /* input block byte array       */
@@ -152,7 +148,7 @@ char AES_ECB_decrypt( const uint8_t* key,     /* decryption key               */
 Main functions for CBC-AES block ciphering
  -----------------------------------------------------------------------------*/
 #if CBC
-void AES_CBC_encrypt( const uint8_t* key,     /* encryption key               */
+char AES_CBC_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t* iVec,    /* initialization vector        */
                       const uint8_t* pText,   /* plain text                   */
                       const size_t pTextLen,  /* length of input plain text   */
@@ -246,11 +242,11 @@ void AES_SIV_encrypt( const uint8_t* keys,    /* encryption key pair          */
                       uint8_t* cText );       /* cipher-text buffer           */
 
 char AES_SIV_decrypt( const uint8_t* keys,    /* decryption key pair          */
+                      const uint8_t* iv,      /* provided init-vector         */
                       const uint8_t* cText,   /* cipher text                  */
                       const size_t cTextLen,  /* length of input cipher-text  */
                       const uint8_t* aData,   /* added authentication data    */
                       const size_t aDataLen,  /* size of authentication data  */
-                      const uint8_t* iv,      /* provided init-vector         */
                       uint8_t* pText );       /* decrypted plain-text         */
 #endif /* SIV */
 
@@ -359,7 +355,7 @@ void AES_EAX_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t* pText,   /* plain text                   */
                       const size_t pTextLen,  /* length of input plain text   */
 #if EAXP
-                      const size_T nonceLen,  /* size of provided nonce       */
+                      const size_t nonceLen,  /* size of provided nonce       */
 #else
                       const uint8_t* aData,   /* added authentication data    */
                       const size_t aDataLen,  /* size of authentication data  */
@@ -372,7 +368,7 @@ char AES_EAX_decrypt( const uint8_t* key,     /* decryption key               */
                       const uint8_t* cText,   /* cipher text                  */
                       const size_t cTextLen,  /* length of input cipher-text  */
 #if EAXP
-                      const size_T nonceLen,  /* size of provided nonce       */
+                      const size_t nonceLen,  /* size of provided nonce       */
 #else
                       const uint8_t* aData,   /* added authentication data    */
                       const size_t aDataLen,  /* size of authentication data  */
@@ -412,7 +408,7 @@ void AES_CMAC( const uint8_t* key,            /* encryption/cipher key        */
 #endif
 
 /**----------------------------------------------------------------------------
-These constants should be defined here for external references:
+The error codes and key length should be defined here for external references:
  -----------------------------------------------------------------------------*/
 #define ENCRYPTION_FAILURE       0x1E
 #define DECRYPTION_FAILURE       0x1D
@@ -422,8 +418,11 @@ These constants should be defined here for external references:
 #if (AES___ == 256) || (AES___ == 192)
 #define AES_KEY_LENGTH (AES___/8)
 #else
-#define AES_KEY_LENGTH 16
+#define AES_KEY_LENGTH  16
 #endif
+
+#define SMALL_CIPHER     0                    /*  explained at the bottom ↓↓  */
+#define REDUCE_CODE_SIZE 1
 
 #endif /* header guard */
 
@@ -464,9 +463,19 @@ These constants should be defined here for external references:
     for the nonce synthesis. Here we assume that only one unit of AAD (aData) is
     sufficient, which is practically true.
 
-* The key wrapping mode is also denoted by KW. In this mode, according to RFC-
-    3394, the input secret-to-be-wrapped is divided into 64-bit blocks. Number
-    of blocks is at least 2, and it is assumed that no padding is required. The
-    wrapped output has an additional block, i.e. outputSize = secretSize + 8.
+* The key wrapping mode is also denoted by KW. In this mode, the input secret is
+    divided into 64bit blocks. Number of blocks is at least 2, and it is assumed
+    that no padding is required. For padding, the KWP mode is used which is
+    easily implementable, but left as an exercise! In the NIST document you may
+    find some mentions of TKW which is for 3DES and irrelevant here. Anyway, the
+    wrapped output has an additional block, i.e. wrappedSize = secretSize + 8.
+
+* If the length of the input cipher/plain text is 'always' less than 4KB, you
+    can enable the SMALL_CIPHER macro to save a few bytes in the compiled code.
+    NOTE that for key-wrapping, this limit is 42 blocks (336 bytes) of secret
+    key. These assumptions are likely to be valid for some embedded systems and
+    small applications. Furthermore, enabling that other macro, REDUCE_CODE_SIZE
+    had a considerable effect on the size of the compiled code in my own tests.
+    Nonetheless, others might get a different result from them.
 
 */

@@ -2,14 +2,13 @@
  ==============================================================================
  Name        : XTStest.c
  Author      : polfosol
- Version     : 2.0.0.0
+ Version     : 2.1.0.0
  Copyright   : copyright © 2022 - polfosol
  Description : illustrating how the NIST's vectors for AES-XTS mode are used
  ==============================================================================
  */
 
 #include <stdio.h>
-#include <string.h>
 #include "../micro_aes.h"
 
 #define TESTFILEPATH "XTSGenAES128.rsp"
@@ -93,25 +92,25 @@ int main()
         {
             if (strncmp(buffer, linehdr[i], strlen(linehdr[i])) == 0)
             {
-                value = strrchr(buffer, ' ');
+                value = strrchr(buffer, ' ') + 1;
                 break;
             }
         }
         switch (i)
         {
         case 0:
-            str2bytes(value + 1, key);
+            str2bytes(value, key);
             break;
         case 1:
-            str2bytes(value + 1, iv);
+            str2bytes(value, iv);
             break;
         case 2:
-            s = strlen(value + 1) / 2;
-            str2bytes(value + 1, p);
+            s = strlen(value) / 2;
+            str2bytes(value, p);
             ++n;
             break;
         case 3:
-            str2bytes(value + 1, c);
+            str2bytes(value, c);
             ++n;
             break;
         default:

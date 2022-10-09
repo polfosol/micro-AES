@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.c
  Author      : polfosol
- Version     : 8.9.5.0
+ Version     : 9.0.1.0
  Copyright   : copyright © 2022 - polfosol
  Description : ANSI-C compatible implementation of µAES ™ library.
  ==============================================================================
@@ -20,10 +20,12 @@
 #define Nk     (KEYSIZE/4)   /* The number of 32 bit words in a key.          */
 #define ROUNDS      (Nk+6)   /* The number of rounds in AES Cipher.           */
 
-/** Since the RoundKey is a static array, it might be exposed to some attacks.
- * By enabling this macro, the RoundKey buffer is wiped at the end of ciphering
- * operations. However, this is NOT A GUARANTEE against side-channel attacks. */
+/** The rationale of these macros is explained at the bottom of header file:  */
 #define INCREASE_SECURITY   0
+#define SMALL_CIPHER        0
+#define REDUCE_CODE_SIZE    1
+
+#define IMPLEMENT(x)  (x) > 0
 
 /** state_t represents rijndael state matrix. fixed-size memory blocks have an
  * essential role in all algorithms. so it may be a good aide for readability to
@@ -38,8 +40,6 @@ typedef unsigned char count_t;
 typedef size_t   count_t;
 #endif
 
-#define IMPLEMENT(x)  (x) > 0
-
 /**--------------------------------------------------------------------------**\
                                Private variables:
 \*----------------------------------------------------------------------------*/
@@ -53,7 +53,6 @@ static uint8_t RoundKey[BLOCKSIZE * ROUNDS + KEYSIZE];
  * limited. Please refer to:   https://en.wikipedia.org/wiki/Rijndael_S-box   */
 static const uint8_t sbox[256] =
 {
-/*  0     1     2     3     4     5     6     7     8     9     A     B     C     D     E     F */
     0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
     0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0,
     0xb7, 0xfd, 0x93, 0x26, 0x36, 0x3f, 0xf7, 0xcc, 0x34, 0xa5, 0xe5, 0xf1, 0x71, 0xd8, 0x31, 0x15,
@@ -95,7 +94,7 @@ static const uint8_t rsbox[256] =
 #endif
 
 /**--------------------------------------------------------------------------**\
-                   Auxiliary functions for Rijndael algorithm
+                 Auxiliary functions for the Rijndael algorithm
 \*----------------------------------------------------------------------------*/
 
 #define getSBoxValue(num)  (sbox[(num)])
@@ -127,20 +126,13 @@ static void xorBlock( const block_t src, block_t dest )
 }
 #endif
 
-#if INCREASE_SECURITY
-#define BURN_AFTER_READ  memset( RoundKey, 0, sizeof RoundKey );
-#else
-#define BURN_AFTER_READ  {}
-#endif
-
 /**--------------------------------------------------------------------------**\
               Main functions for the Rijndael encryption algorithm
 \*----------------------------------------------------------------------------*/
 
 /**
- * @brief   produces (ROUNDS+1) round keys, which are used in each round
- *          to encrypt/decrypt the intermediate states
- * @param   key       encryption key with a fixed size specified by KEYSIZE
+ * produces (ROUNDS+1) round keys from the main encryption key, which are used
+ * in each round to encrypt/decrypt the intermediate states.
  */
 static void KeyExpansion( const uint8_t* key )
 {
@@ -440,6 +432,51 @@ static void mixThenXor( const block_t b, fmix_t mix, block_t tmp,
 }
 #endif
 
+#if CTR
+
+typedef void (*finc_t)( block_t );               /* function-ptr to increment */
+
+/** increment value of big-endian counter block.                              */
+static void incB( block_t block )
+{
+#if SMALL_CIPHER                                 /*  <-- use it with CAUTION  */
+    ++block[BLOCKSIZE - 1];
+#else
+    uint8_t i;                                   /*  inc until no overflow    */
+    for (i = BLOCKSIZE - 1; !++block[i] && i--; );
+#endif
+}
+
+#if SMALL_CIPHER
+#define putValueB(block, pos, val)  block[pos - 1] = val >> 8;  block[pos] = val
+#else
+
+/** copy big endian value to the block, starting at the specified position... */
+static void putValueB( block_t block, uint8_t pos, size_t val )
+{
+    do
+        block[pos--] = (uint8_t) val;
+    while (val >>= 8);
+}
+#endif
+#endif /* CTR */
+
+#if XTS || GCM_SIV
+
+#if SMALL_CIPHER
+#define putValueL(block, pos, val)  block[pos + 1] = val >> 8;  block[pos] = val
+#else
+
+/** copy little endian value to the block, starting at the specified position */
+static void putValueL( block_t block, uint8_t pos, size_t val )
+{
+    do
+        block[pos++] = (uint8_t) val;
+    while (val >>= 8);
+}
+#endif
+#endif /* XTS */
+
 #if EAX && !EAXP || SIV || OCB || CMAC
 
 /** Multiply a block by two in Galois bit field GF(2^128): big-endian version */
@@ -512,6 +549,53 @@ static void MulGf128( const block_t x, block_t y )
     memcpy( y, result, sizeof result );          /*  result is saved into y   */
 }
 #endif /* GCM */
+
+#if GCM_SIV
+
+/** Divide a block by two in GF(2^128) field: the little-endian version (duh) */
+static void halveGf128L( block_t block )
+{
+    uint8_t c = 0, l, i;
+    for (i = BLOCKSIZE; i--; )                   /* see the explanations for  */
+    {                                            /* ..the above-defined       */
+        l = block[i] << 7;                       /* ..halveGf128B function    */
+        block[i] >>= 1;
+        block[i] |= c;
+        c = l;
+    }
+    if (c)  block[BLOCKSIZE - 1] ^= 0xe1;        /*   0xe1 = 11100001b        */
+}
+
+/** increase the value of a counter block. this is the little-endian version. */
+static void incL( block_t block )
+{
+#if SMALL_CIPHER                                 /*  <-- use it with CAUTION  */
+    ++block[0];
+#else
+    uint8_t i;                                   /*  inc until no overflow    */
+    for (i = 0; !++block[i] && i < 4; ++i);
+#endif
+}
+
+/** Dot multiplication in GF(2^128) field: used in POLYVAL hash for GCM-SIV.. */
+static void DotGf128( const block_t x, block_t y )
+{
+    uint8_t i, j, result[BLOCKSIZE] = { 0 };     /*  working memory           */
+
+    for (i = BLOCKSIZE; i--; )
+    {
+        for (j = 0x80; j != 0; j >>= 1)          /*  check all the bits of X, */
+        {
+            halveGf128L( y );                    /*  Y_next = (Y / 2) in GF   */
+            if (x[i] & j)
+            {                                    /*  if any bit is set:       */
+                xorBlock( y, result );           /*  M ^= (Y / 2)             */
+            }
+        }
+    }
+    memcpy( y, result, sizeof result );          /*  result is saved into y   */
+}
+#endif /* GCM-SIV */
 
 #if OCB
 
@@ -593,79 +677,15 @@ static void cMac( const block_t D, const block_t Q,
 #endif
 #endif /* AEAD */
 
-#if CTR
-
-typedef void (*finc_t)( block_t );               /* function-ptr to increment */
-
-/** increment value of big-endian counter block.                              */
-static void incB( block_t block )
-{
-#if SMALL_CIPHER                                 /*  <-- use it with CAUTION  */
-    ++block[BLOCKSIZE - 1];
-#else
-    uint8_t i;                                   /*  inc until no overflow    */
-    for (i = BLOCKSIZE - 1; !++block[i] && i--; );
-#endif
-}
-
-#if SMALL_CIPHER
-#define putValueB(block, pos, val)  block[pos - 1] = val >> 8;  block[pos] = val
-#else
-
-/** copy big endian value to the block, starting at the specified position... */
-static void putValueB( block_t block, uint8_t pos, size_t val )
-{
-    do
-        block[pos--] = (uint8_t) val;
-    while (val >>= 8);
-}
-#endif
-#endif /* CTR */
-
-#if XTS || GCM_SIV
-
-#if SMALL_CIPHER
-#define putValueL(block, pos, val)  block[pos + 1] = val >> 8;  block[pos] = val
-#else
-
-/** copy little endian value to the block, starting at the specified position */
-static void putValueL( block_t block, uint8_t pos, size_t val )
-{
-    do
-        block[pos++] = (uint8_t) val;
-    while (val >>= 8);
-}
-#endif
-#if GCM_SIV
-
-/** increase the value of a counter block. this is the little-endian version. */
-static void incL( block_t block )
-{
-#if SMALL_CIPHER                                 /*  <-- use it with CAUTION  */
-    ++block[0];
-#else
-    uint8_t i;                                   /*  inc until no overflow    */
-    for (i = 0; !++block[i] && i < BLOCKSIZE; ++i);
-#endif
-}
-#endif
-
-/** Multiply a block by 2 in GF(2^128) field: the POLYVAL version for GCM_SIV */
-static void doubleGf128P( block_t block )
-{
-    uint8_t c = block[BLOCKSIZE - 1] >> 7, m, i;
-    for (i = 0; i < BLOCKSIZE; ++i)
-    {                                            /*  somehow a combination of */
-        m = block[i] >> 7;                       /*  ..doubleGF128L and       */
-        block[i] <<= 1;                          /*  ..halveGF128B (that are  */
-        block[i] |= c;                           /*  ..introduced above)      */
-        c = m;                                   /*   ¯\_(●_o)_/¯ .. m(-_-)m  */
-    }
-    if (c)  block[BLOCKSIZE - 1] ^= 0xc2;        /*  0xc2 = 11100001b << 1    */
-}
-#endif /* XTS */
-
 #define GOTO_NEXT_BLOCK  x += BLOCKSIZE;   y += BLOCKSIZE;
+
+#if INCREASE_SECURITY
+#define BURN_AFTER_READ       memset( RoundKey, 0, sizeof RoundKey );
+#define SABOTAGE_RESULT(len)  memset( pText, 0, len )
+#else
+#define BURN_AFTER_READ
+#define SABOTAGE_RESULT(len)  (void) (len)
+#endif
 
 
 /**--------------------------------------------------------------------------**\
@@ -1235,11 +1255,11 @@ char AES_GCM_decrypt( const uint8_t* key, const uint8_t* nonce,
     GHash( H, cText, aData, cTextLen, aDataLen, gsh );
 
     RijndaelEncrypt( iv, H );
-    xorBlock( H, gsh );                          /*  tag = Enc(iv) ^ GHASH    */
-    if (memcmp( gsh, auTag, tagSize ) != 0)      /*  compare tags and proceed */
-    {                                            /*  ..if they match.         */
-        BURN_AFTER_READ
-        return AUTHENTICATION_FAILURE;
+    xorBlock( H, gsh );                          /*   tag = Enc(iv) ^ GHASH   */
+    if (memcmp( gsh, auTag, tagSize ) != 0)      /* compare tags and proceed  */
+    {                                            /* ..if they match. it is    */
+        BURN_AFTER_READ                          /* ..recommended to use a    */
+        return AUTHENTICATION_FAILURE;           /* ..'secure' compare method */
     }
     CTR_Cipher( iv, 1, &incB, cText, cTextLen, pText );
     BURN_AFTER_READ
@@ -1343,8 +1363,9 @@ char AES_CCM_decrypt( const uint8_t* key, const uint8_t* nonce,
     BURN_AFTER_READ
 
     xorBlock( iv, cm );
-    if (memcmp( cm, auTag, tagSize ) != 0)       /* sabotage results ↓ maybe? */
-    {                                            /* memset(pText, 0, Length); */
+    if (memcmp( cm, auTag, tagSize ) != 0)       /*  memcmp is vulnerable to  */
+    {                                            /*  ..timing attacks         */
+        SABOTAGE_RESULT( cTextLen );
         return AUTHENTICATION_FAILURE;
     }
     return ENDED_IN_SUCCESS;
@@ -1439,6 +1460,7 @@ char AES_SIV_decrypt( const uint8_t* keys, const block_t iv,
 
     if (memcmp( IV, iv, sizeof IV ) != 0)
     {
+        SABOTAGE_RESULT( cTextLen );
         return AUTHENTICATION_FAILURE;
     }
     return ENDED_IN_SUCCESS;
@@ -1729,8 +1751,9 @@ char AES_OCB_decrypt( const uint8_t* key, const uint8_t* nonce,
     OCB_GetTag( delta, Ls, Ld, pText, aData, cTextLen, aDataLen, delta );
     BURN_AFTER_READ                              /* saved the tag into delta! */
 
-    if (memcmp( delta, auTag, tagSize ) != 0)    /* sabotage results ↓ maybe? */
-    {                                            /* memset(pText, 0, Length); */
+    if (memcmp( delta, auTag, tagSize ) != 0)
+    {
+        SABOTAGE_RESULT( cTextLen );
         return AUTHENTICATION_FAILURE;
     }
     return ENDED_IN_SUCCESS;
@@ -1742,45 +1765,110 @@ char AES_OCB_decrypt( const uint8_t* key, const uint8_t* nonce,
       SIV-GCM-AES (Galois counter mode with synthetic i.v): main functions
 \*----------------------------------------------------------------------------*/
 #if IMPLEMENT(GCM_SIV)
+
+/** calculates the POLYVAL of plaintext and AAD using authentication subkey H */
+static void Polyval( const block_t H, const void* pText, const void* aData,
+                     const size_t pTextLen, const size_t aDataLen, block_t pv )
+{
+    block_t buf = { 0 };                         /*  save bit-sizes into buf  */
+    putValueL( buf, 0, aDataLen * 8 );
+    putValueL( buf, 8, pTextLen * 8 );
+
+    MAC( aData, aDataLen, H, &DotGf128, pv );    /*  first digest AAD, then   */
+    MAC( pText, pTextLen, H, &DotGf128, pv );    /*  ..plaintext, and then    */
+    MAC( buf, sizeof buf, H, &DotGf128, pv );    /*  ..bit sizes into POLYVAL */
+}
+
+/** derive the pair of authentication-encryption-keys from main key and nonce */
+static void DeriveKeys( const uint8_t* key, const uint8_t* nonce, block_t AK )
+{
+    uint8_t iv[BLOCKSIZE] = { 0 }, AEKeypair[KEYSIZE + 24];
+    uint8_t i, *k = AEKeypair;
+    memcpy( iv + 4, nonce, 12 );
+
+    AES_SetKey( key );
+    for (i = 0; i < KEYSIZE / 8 + 2; ++i)
+    {
+        RijndaelEncrypt( iv, k );                /*  encrypt nonce & take MSB */
+        incL( iv );                              /*  increment nonce (L.E.)   */
+        k += 8;
+    }
+    AES_SetKey( AEKeypair + BLOCKSIZE );         /*  set the main cipher-key  */
+    memcpy( AK, AEKeypair, BLOCKSIZE );          /*  take authentication key  */
+}
+
 /**
  * @brief   encrypt the input plaintext using SIV-GCM-AES block-cipher method
  * @param   key       encryption key with a fixed size specified by KEYSIZE
- * @param   nonce     a.k.a initialization vector
+ * @param   nonce     provided 96-bit nonce
  * @param   pText     input plain-text buffer
  * @param   pTextLen  size of plaintext in bytes
  * @param   aData     additional authentication data
  * @param   aDataLen  size of additional authentication data
- * @param   cText     encrypted cipher-text buffer
- * @param   auTag     message authentication tag. buffer must be 16-bytes long
+ * @param   cText     encrypted cipher-text + 16 bytes MANDATORY tag appended
  */
 void GCM_SIV_encrypt( const uint8_t* key, const uint8_t* nonce,
                       const uint8_t* pText, const size_t pTextLen,
                       const uint8_t* aData, const size_t aDataLen,
-                      uint8_t* cText, block_t auTag )
+                      uint8_t* cText )
 {
+    block_t AK, S = { 0 };
+    DeriveKeys( key, nonce, AK );                /* get authentication subkey */
+
+    Polyval( AK, pText, aData, pTextLen, aDataLen, S );
+    for (*AK = 0; *AK < 12; ++*AK)
+    {                                            /* use AK[0] as counter!     */
+        S[*AK] ^= nonce[*AK];                    /* xor nonce with POLYVAL    */
+    }
+    S[sizeof S - 1] &= 0x7F;                     /* clear one bit & encrypt,  */
+    RijndaelEncrypt( S, S );                     /* ..to get auth. tag        */
+    memcpy( cText + pTextLen, S, sizeof S );
+
+    S[sizeof S - 1] |= 0x80;                     /* set 1 bit to get CTR I.V  */
+    CTR_Cipher( S, 0, &incL, pText, pTextLen, cText );
     BURN_AFTER_READ
 }
 
 /**
  * @brief   decrypt the input ciphertext using SIV-GCM-AES block-cipher method
  * @param   key       decryption key with a fixed size specified by KEYSIZE
- * @param   nonce     a.k.a initialization vector
- * @param   cText     input cipher-text buffer
- * @param   cTextLen  size of ciphertext in bytes
+ * @param   nonce     provided 96-bit nonce
+ * @param   cText     input cipher-text buffer + 16 bytes MANDATORY tag appended
+ * @param   cTextLen  size of ciphertext + 16
  * @param   aData     additional authentication data
  * @param   aDataLen  size of additional authentication data
- * @param   auTag     message authentication tag (if any)
- * @param   tagSize   length of authentication tag
  * @param   pText     plain-text output buffer
- * @return            whether message authentication was successful
+ * @return            whether message authentication/decryption was successful
  */
 char GCM_SIV_decrypt( const uint8_t* key, const uint8_t* nonce,
                       const uint8_t* cText, const size_t cTextLen,
                       const uint8_t* aData, const size_t aDataLen,
-                      const uint8_t* auTag, const uint8_t tagSize,
                       uint8_t* pText )
 {
-    BURN_AFTER_READ
+    block_t AK, S;
+    uint8_t const *tag = cText + cTextLen - 16;
+    if (cTextLen < 16)  return DECRYPTION_FAILURE;
+
+    DeriveKeys( key, nonce, AK );                /* get authentication subkey */
+    memcpy( S, tag, sizeof S );                  /* tag contains counter I.V. */
+    S[sizeof S - 1] |= 0x80;
+    CTR_Cipher( S, 0, &incL, cText, cTextLen - 16, pText );
+
+    memset( S, 0, sizeof S );
+    Polyval( AK, pText, aData, cTextLen - 16, aDataLen, S );
+    for (*AK = 0; *AK < 12; ++*AK)
+    {                                            /* using AK[0] as counter!   */
+        S[*AK] ^= nonce[*AK];                    /* xor nonce with POLYVAL    */
+    }
+    S[sizeof S - 1] &= 0x7F;                     /* clear one bit & encrypt,  */
+    RijndaelEncrypt( S, S );                     /* ..to get tag & verify it  */
+
+    BURN_AFTER_READ                              /* rfc-8452 RECOMMENDS not   */
+    if (memcmp( S, tag, sizeof S ) != 0)         /* ..using memcmp to avoid   */
+    {                                            /* ..timing attacks. e.g use */
+        SABOTAGE_RESULT( cTextLen - 16 );        /* ..a constant-time compare */
+        return AUTHENTICATION_FAILURE;           /* ..method: timingsafe_bcmp */
+    }
     return ENDED_IN_SUCCESS;
 }
 #endif /* GCM-SIV */
@@ -1869,10 +1957,8 @@ char AES_KEY_unwrap( const uint8_t* kek,
     }
     BURN_AFTER_READ
 
-    for (i = 0; i < S; ++i)                      /*  error checking...        */
-    {
-        if (A[i] != 0xA6)  return DECRYPTION_FAILURE;
-    }
-    return ENDED_IN_SUCCESS;
+    for (i = 0; i < S; ++i)  j |= A[i] ^ 0xA6;   /*  authenticate/error check */
+
+    return j ? DECRYPTION_FAILURE : ENDED_IN_SUCCESS;
 }
 #endif /* KWA */

@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.h
  Author      : polfosol
- Version     : 8.9.5.0
+ Version     : 9.0.1.0
  Copyright   : copyright © 2022 - polfosol
  Description : μAES ™ is a minimalist all-in-one library for AES encryption
  ==============================================================================
@@ -10,7 +10,6 @@
 
 #ifndef _MICRO__AES_
 #define _MICRO__AES_
-#include <string.h>
 
 /**----------------------------------------------------------------------------
 You can use different AES algorithms by changing this macro. Default is AES-128
@@ -21,10 +20,10 @@ You can use different AES algorithms by changing this macro. Default is AES-128
 AES block-cipher modes of operation. The following modes can be enabled/disabled
  by setting their corresponding macros to TRUE (1) or FALSE (0).
  -----------------------------------------------------------------------------*/
-#define BLOCK_CIPHER_MODES  1
+#define DISABLE_BLOCKCIPHER 0
 #define AEAD_MODES  1      /* authenticated encryption with associated data.  */
 
-#if BLOCK_CIPHER_MODES
+#if !DISABLE_BLOCKCIPHER
 #define ECB         1      /* electronic code-book (NIST SP 800-38A)          */
 #define CBC         1      /* cipher block chaining (NIST SP 800-38A)         */
 #define CFB         1      /* cipher feedback (NIST SP 800-38A)               */
@@ -32,10 +31,12 @@ AES block-cipher modes of operation. The following modes can be enabled/disabled
 #define CTR         1      /* counter-block (NIST SP 800-38A)                 */
 #define XEX         1      /* xor-encrypt-xor (NIST SP 800-38E)               */
 #define KWA         1      /* key wrap with authentication (NIST SP 800-38F)  */
-#define FPE         0      /* format-preserving encryption (NIST SP 800-38G)  */
+#define FPE         1      /* format-preserving encryption (NIST SP 800-38G)  */
 #endif
 
 #if AEAD_MODES
+#define CMAC        1      /* message authentication code (NIST SP 800-38B)   */
+
 #if CTR
 #define CCM         1      /* counter with CBC-MAC (RFC-3610 & SP 800-38C)    */
 #define GCM         1      /* Galois/counter mode with GMAC (NIST SP 800-38D) */
@@ -47,8 +48,6 @@ AES block-cipher modes of operation. The following modes can be enabled/disabled
 #if XEX
 #define OCB         1      /* offset codebook mode (RFC-7253)                 */
 #endif
-
-#define CMAC        1      /* message authentication code (NIST SP 800-38B)   */
 #endif
 
 #if CBC
@@ -67,7 +66,7 @@ AES block-cipher modes of operation. The following modes can be enabled/disabled
 #define EAXP        0      /* EAX-prime, as specified by IEEE Std 1703        */
 #endif
 
-#define WTF! (BLOCK_CIPHER_MODES || CMAC)
+#define WTF  (!CMAC && DISABLE_BLOCKCIPHER)
 #define MICRO_RJNDL WTF    /* none of above; just rijndael API. dude.., why?  */
 
 /**----------------------------------------------------------------------------
@@ -93,7 +92,7 @@ Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
 
 #if CCM
 #define CCM_NONCE_LEN  11  /* for 32-bit count (since one byte is reserved).  */
-#define CCM_TAG_LEN    16
+#define CCM_TAG_LEN    16  /* an even number in the range of 4..16            */
 #endif
 
 #if GCM
@@ -110,10 +109,11 @@ Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
 
 /**----------------------------------------------------------------------------
 Since stdint.h is not a part of ANSI-C, we used a 'trick' that should not cause
- any problems. You may replace the following two lines by: #include <stdint.h>
+ any problems. Just replace the lines ended by uint8_T with: #include <stdint.h>
  -----------------------------------------------------------------------------*/
-typedef unsigned char  uint8_T;
-#define uint8_t  uint8_T
+#include <string.h>
+typedef  unsigned char  uint8_T;
+#define  uint8_t  uint8_T
 
 #ifdef __cplusplus
 extern "C" {
@@ -275,30 +275,6 @@ char AES_GCM_decrypt( const uint8_t* key,     /* decryption key               */
 #endif /* GCM */
 
 /**----------------------------------------------------------------------------
-Main functions for GCM-SIV-AES block ciphering
- -----------------------------------------------------------------------------*/
-#if GCM_SIV
-void GCM_SIV_encrypt( const uint8_t* key,     /* encryption key               */
-                      const uint8_t* nonce,   /* a.k.a initialization vector  */
-                      const uint8_t* pText,   /* plain text                   */
-                      const size_t pTextLen,  /* length of input plain text   */
-                      const uint8_t* aData,   /* added authentication data    */
-                      const size_t aDataLen,  /* size of authentication data  */
-                      uint8_t* cText,         /* cipher-text buffer           */
-                      uint8_t* auTag );       /* message authentication tag   */
-
-char GCM_SIV_decrypt( const uint8_t* key,     /* decryption key               */
-                      const uint8_t* nonce,   /* a.k.a initialization vector  */
-                      const uint8_t* cText,   /* cipher text                  */
-                      const size_t cTextLen,  /* length of input cipher-text  */
-                      const uint8_t* aData,   /* added authentication data    */
-                      const size_t aDataLen,  /* size of authentication data  */
-                      const uint8_t* auTag,   /* authentication tag           */
-                      const uint8_t tagSize,  /* size of tag (if any)         */
-                      uint8_t* pText );       /* decrypted plain-text         */
-#endif /* GCM-SIV */
-
-/**----------------------------------------------------------------------------
 Main functions for CCM-AES block ciphering
  -----------------------------------------------------------------------------*/
 #if CCM
@@ -379,6 +355,27 @@ char AES_EAX_decrypt( const uint8_t* key,     /* decryption key               */
 #endif /* EAX */
 
 /**----------------------------------------------------------------------------
+Main functions for GCM-SIV-AES block ciphering
+ -----------------------------------------------------------------------------*/
+#if GCM_SIV
+void GCM_SIV_encrypt( const uint8_t* key,     /* encryption key               */
+                      const uint8_t* nonce,   /* provided 96-bit nonce        */
+                      const uint8_t* pText,   /* plain text                   */
+                      const size_t pTextLen,  /* length of input plain text   */
+                      const uint8_t* aData,   /* added authentication data    */
+                      const size_t aDataLen,  /* size of authentication data  */
+                      uint8_t* cText );       /* cipher-text + 16 bytes tag   */
+
+char GCM_SIV_decrypt( const uint8_t* key,     /* decryption key               */
+                      const uint8_t* nonce,   /* provided 96-bit nonce        */
+                      const uint8_t* cText,   /* cipher text + 16 bytes tag   */
+                      const size_t cTextLen,  /* length of cipher-text + 16   */
+                      const uint8_t* aData,   /* added authentication data    */
+                      const size_t aDataLen,  /* size of authentication data  */
+                      uint8_t* pText );       /* decrypted plain-text         */
+#endif /* GCM-SIV */
+
+/**----------------------------------------------------------------------------
 Main functions for AES key-wrapping; more info at the bottom of this page.
  -----------------------------------------------------------------------------*/
 #if KWA
@@ -392,6 +389,13 @@ char AES_KEY_unwrap( const uint8_t* kek,      /* key encryption key           */
                      const size_t wrapLen,    /* size of input (secretLen +8) */
                      uint8_t* secret );       /* buffer for unwrapped key     */
 #endif /* KWA */
+
+/**----------------------------------------------------------------------------
+Main functions for FPE-AES (to be added soon)
+ -----------------------------------------------------------------------------*/
+#if FPE
+
+#endif /* FPE */
 
 /**----------------------------------------------------------------------------
 Main function for AES cipher-based message authentication code
@@ -420,9 +424,6 @@ The error codes and key length should be defined here for external references:
 #else
 #define AES_KEY_LENGTH  16
 #endif
-
-#define SMALL_CIPHER     0                    /*  explained at the bottom ↓↓  */
-#define REDUCE_CODE_SIZE 1
 
 #endif /* header guard */
 
@@ -470,12 +471,19 @@ The error codes and key length should be defined here for external references:
     find some mentions of TKW which is for 3DES and irrelevant here. Anyway, the
     wrapped output has an additional block, i.e. wrappedSize = secretSize + 8.
 
-* If the length of the input cipher/plain text is 'always' less than 4KB, you
+* Let me explain three extra options that are defined in the source file. The
+    most sensitive part of the Rijndael algorithm is the round-keys. In this
+    library they are defined as a static array, which might be exposed to some
+    attacks. By enabling INCREASE_SECURITY macro, the RoundKey buffer is wiped
+    at the end of ciphering operations. However, this is NOT A GUARANTEE against
+    side-channel attacks.
+    If the length of the input cipher/plain text is 'always' less than 4KB, you
     can enable the SMALL_CIPHER macro to save a few bytes in the compiled code.
-    NOTE that for key-wrapping, this limit is 42 blocks (336 bytes) of secret
+    Note that for key-wrapping, this limit is 42 blocks (336 bytes) of secret
     key. These assumptions are likely to be valid for some embedded systems and
-    small applications. Furthermore, enabling that other macro, REDUCE_CODE_SIZE
-    had a considerable effect on the size of the compiled code in my own tests.
-    Nonetheless, others might get a different result from them.
+    small applications.
+    Furthermore, enabling that other macro, REDUCE_CODE_SIZE had a considerable
+    effect on the size of the compiled code in my own tests. Nonetheless, others
+    might get a different result from them.
 
 */

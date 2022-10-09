@@ -3,7 +3,7 @@
 
 **A minimalist ANSI-C compatible code for most of the AES-related algorithms**.
 
-[![GitHub release](https://img.shields.io/static/v1?message=%C2%B5AES&logo=github&labelColor=gray&color=blue&logoColor=white&label=%20)](https://github.com/polfosol/micro-AES) ![C](https://img.shields.io/badge/langauge-C-blue.svg) [![Build Status](https://img.shields.io/badge/1.0-alpha-blue)](https://github.com/polfosol/micro-AES) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![GitHub release](https://img.shields.io/static/v1?message=%C2%B5AES&logo=github&labelColor=gray&color=blue&logoColor=white&label=%20)](https://github.com/polfosol/micro-AES) ![C](https://img.shields.io/badge/langauge-C-blue.svg) [![Build Status](https://img.shields.io/badge/1.0-beta2-blue)](https://github.com/polfosol/micro-AES/releases) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 This library is a highly flexible, all-in-one implementation of different AES encryption schemes and block ciphers modes. Before you continue, please keep in mind that, most security experts strongly warn *against* implementing your own version of AES—or other ciphering algorithms; AND THEY ARE ABSOLUTELY RIGHT!
 
@@ -41,7 +41,7 @@ With that in mind, I shall say that the main purpose of developing µAES was pur
 
 ## Remarks
 
-For the sake of simplicity, it is mostly assumed that the input parameters of the functions are well defined, and the user knows what they're doing. As a result, many error checks are just skipped. Obviously, this is a naive and sometimes dangerous assumption. One must be aware that in a serious application, anything can be fed into the functions and they must take all the necessary precautions for erroneous parameters.
+For the sake of simplicity, it is often assumed that the input parameters of the functions are well defined, and the user knows what they're doing. As a result, a bunch of error checks are just skipped. Obviously, this is a naive and sometimes dangerous assumption. One must be aware that in a serious application, anything can be fed into the functions and they must take all the necessary precautions for erroneous parameters.
 
 µAES is palpably influenced by [kokke's tiny-AES](https://github.com/kokke/tiny-AES-c) library, but I have made some modifications which makes it a bit smaller and faster. I shall give kudos to their great effort which paved the way for many other branches.
 
@@ -49,6 +49,6 @@ All the contents of this repository (except the ones that I didn't write!) are s
 
 Copyright © 2022 - polfosol
 
-$In$ $loving$ $memory$ $of$ [**_Mahsa  Amini_**](https://en.wikipedia.org/wiki/Death_of_Mahsa_Amini) :black_heart:
+$In$ $sorrowful$ $memory$ $of$ [**_Mahsa  Amini_**](https://en.wikipedia.org/wiki/Death_of_Mahsa_Amini) :black_heart:
 
 ![The foot-shooting prevention agreement taken from Jeff Moser's blog](https://i.stack.imgur.com/SoY7x.png)

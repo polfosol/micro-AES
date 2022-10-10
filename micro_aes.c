@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.c
  Author      : polfosol
- Version     : 9.0.1.0
+ Version     : 9.0.2.0
  Copyright   : copyright © 2022 - polfosol
  Description : ANSI-C compatible implementation of µAES ™ library.
  ==============================================================================
@@ -439,12 +439,15 @@ typedef void (*finc_t)( block_t );               /* function-ptr to increment */
 /** increment value of big-endian counter block.                              */
 static void incB( block_t block )
 {
-#if SMALL_CIPHER                                 /*  <-- use it with CAUTION  */
-    ++block[BLOCKSIZE - 1];
-#else
     uint8_t i;                                   /*  inc until no overflow    */
     for (i = BLOCKSIZE - 1; !++block[i] && i--; );
-#endif
+}
+
+/** increase the value of a counter block. this is the little-endian version. */
+static void incL( block_t block )
+{
+    uint8_t i;
+    for (i = 0; !++block[i] && i < 4; ++i);
 }
 
 #if SMALL_CIPHER
@@ -563,18 +566,7 @@ static void halveGf128L( block_t block )
         block[i] |= c;
         c = l;
     }
-    if (c)  block[BLOCKSIZE - 1] ^= 0xe1;        /*   0xe1 = 11100001b        */
-}
-
-/** increase the value of a counter block. this is the little-endian version. */
-static void incL( block_t block )
-{
-#if SMALL_CIPHER                                 /*  <-- use it with CAUTION  */
-    ++block[0];
-#else
-    uint8_t i;                                   /*  inc until no overflow    */
-    for (i = 0; !++block[i] && i < 4; ++i);
-#endif
+    if (c)  block[BLOCKSIZE - 1] ^= 0xe1;        /*   B ^= 11100001b          */
 }
 
 /** Dot multiplication in GF(2^128) field: used in POLYVAL hash for GCM-SIV.. */
@@ -966,21 +958,25 @@ void AES_OFB_decrypt( const uint8_t* key, const block_t iVec,
 /**
  * @brief   the overall scheme of operation in block-counter mode
  * @param   iVec      initialization vector a.k.a. nonce
- * @param   preInc    pre-increment the counter block (for CCM/GCM)
- * @param   incr      block-incrementing function: incB (big endian) or incL
+ * @param   big       big-endian block increment (1, 2) or little endian (0)
  * @param   input     buffer of the input plain/cipher-text
  * @param   dataSize  size of input in bytes
  * @param   output    buffer of the resulting cipher/plain-text
  */
-static void CTR_Cipher( const uint8_t* iVec, const int preInc, finc_t incr,
+static void CTR_Cipher( const uint8_t* iVec, const int big,
                         const void* input, const size_t dataSize, void* output )
 {
+#if SMALL_CIPHER
+#define incr(ctr) ++ctr[big ? BLOCKSIZE - 1 : 0]
+#else
+    finc_t const incr = big ? &incB : &incL;     /* block increment function  */
+#endif
     uint8_t const *x = input;
     uint8_t *y = output, ctr[BLOCKSIZE];
     count_t n = dataSize / BLOCKSIZE;
 
     memcpy( ctr, iVec, sizeof ctr );
-    if (preInc)  incr( ctr );                    /*  pre-increment counter    */
+    if (big > 1)  incr( ctr );                   /* pre-increment for CCM/GCM */
 
     while (n--)
     {
@@ -1012,7 +1008,7 @@ void AES_CTR_encrypt( const uint8_t* key, const uint8_t* iv,
     putValueB( ctr, BLOCKSIZE - 1, CTR_STARTVALUE );
 #endif
     AES_SetKey( key );
-    CTR_Cipher( ctr, 0, &incB, pText, pTextLen, cText );
+    CTR_Cipher( ctr, 1, pText, pTextLen, cText );
     BURN_AFTER_READ
 }
 
@@ -1179,8 +1175,8 @@ void AES_CMAC( const uint8_t* key,
 #if IMPLEMENT(GCM)
 
 /** calculates GMAC hash of ciphertext and AAD using authentication subkey H: */
-static void GHash( const block_t H, const void* cText, const void* aData,
-                   const size_t ctextLen, const size_t adataLen, block_t gsh )
+static void GHash( const block_t H, const void* aData, const void* cText,
+                   const size_t adataLen, const size_t ctextLen, block_t gsh )
 {
     block_t buf = { 0 };                         /*  save bit-sizes into buf  */
     putValueB( buf, BLOCKSIZE - 9, adataLen * 8 );
@@ -1198,7 +1194,7 @@ static void GCM_GetIVH( const uint8_t* key,
     AES_SetKey( key );
     RijndaelEncrypt( authKey, authKey );         /* authKey = Enc(zero block) */
 #if GCM_NONCE_LEN != 12
-    GHash( authKey, nonce, NULL, GCM_NONCE_LEN, 0, iv );
+    GHash( authKey, NULL, nonce, 0, GCM_NONCE_LEN, iv );
 #else
     memcpy( iv, nonce, 12 );
     iv[BLOCKSIZE - 1] = 1;
@@ -1224,10 +1220,10 @@ void AES_GCM_encrypt( const uint8_t* key, const uint8_t* nonce,
     block_t H = { 0 }, iv = { 0 }, gsh = { 0 };
     GCM_GetIVH( key, nonce, H, iv );             /*  get IV & auth. subkey H  */
 
-    CTR_Cipher( iv, 1, &incB, pText, pTextLen, cText );
+    CTR_Cipher( iv, 2, pText, pTextLen, cText );
     RijndaelEncrypt( iv, auTag );                /*  tag = Enc(iv) ^ GHASH    */
     BURN_AFTER_READ
-    GHash( H, cText, aData, pTextLen, aDataLen, gsh );
+    GHash( H, aData, cText, aDataLen, pTextLen, gsh );
     xorBlock( gsh, auTag );
 }
 
@@ -1252,7 +1248,7 @@ char AES_GCM_decrypt( const uint8_t* key, const uint8_t* nonce,
 {
     block_t H = { 0 }, iv = { 0 }, gsh = { 0 };
     GCM_GetIVH( key, nonce, H, iv );
-    GHash( H, cText, aData, cTextLen, aDataLen, gsh );
+    GHash( H, aData, cText, aDataLen, cTextLen, gsh );
 
     RijndaelEncrypt( iv, H );
     xorBlock( H, gsh );                          /*   tag = Enc(iv) ^ GHASH   */
@@ -1261,7 +1257,7 @@ char AES_GCM_decrypt( const uint8_t* key, const uint8_t* nonce,
         BURN_AFTER_READ                          /* ..recommended to use a    */
         return AUTHENTICATION_FAILURE;           /* ..'secure' compare method */
     }
-    CTR_Cipher( iv, 1, &incB, cText, cTextLen, pText );
+    CTR_Cipher( iv, 2, cText, cTextLen, pText );
     BURN_AFTER_READ
     return ENDED_IN_SUCCESS;
 }
@@ -1274,8 +1270,8 @@ char AES_GCM_decrypt( const uint8_t* key, const uint8_t* nonce,
 #if IMPLEMENT(CCM)
 
 /** this function calculates the CBC-MAC of plaintext and authentication data */
-static void CBCMac( const block_t iv, const void* pText, const void* aData,
-                    const size_t pTextLen, const size_t aDataLen, block_t cm )
+static void CBCMac( const block_t iv, const void* aData, const void* pText,
+                    const size_t aDataLen, const size_t pTextLen, block_t cm )
 {
     block_t A = { 0 };
     uint8_t q = BLOCKSIZE - 2, p;
@@ -1327,8 +1323,8 @@ void AES_CCM_encrypt( const uint8_t* key, const uint8_t* nonce,
     memcpy( iv + 1, nonce, CCM_NONCE_LEN );
 
     AES_SetKey( key );
-    CBCMac( iv, pText, aData, pTextLen, aDataLen, cm );
-    CTR_Cipher( iv, 1, &incB, pText, pTextLen, cText );
+    CBCMac( iv, aData, pText, aDataLen, pTextLen, cm );
+    CTR_Cipher( iv, 2, pText, pTextLen, cText );
     RijndaelEncrypt( iv, auTag );
     xorBlock( cm, auTag );                       /*  tag = Enc(iv) ^ CBC-MAC  */
     BURN_AFTER_READ
@@ -1357,8 +1353,8 @@ char AES_CCM_decrypt( const uint8_t* key, const uint8_t* nonce,
     memcpy( iv + 1, nonce, CCM_NONCE_LEN );
 
     AES_SetKey( key );
-    CTR_Cipher( iv, 1, &incB, cText, cTextLen, pText );
-    CBCMac( iv, pText, aData, cTextLen, aDataLen, cm );
+    CTR_Cipher( iv, 2, cText, cTextLen, pText );
+    CBCMac( iv, aData, pText, aDataLen, cTextLen, cm );
     RijndaelEncrypt( iv, iv );                   /*  tag = Enc(iv) ^ CBC-MAC  */
     BURN_AFTER_READ
 
@@ -1428,7 +1424,7 @@ void AES_SIV_encrypt( const uint8_t* keys,
     IV[8] &= 0x7F;  IV[12] &= 0x7F;              /*  clear 2 bits for cipher  */
 
     AES_SetKey( keys + KEYSIZE );
-    CTR_Cipher( IV, 0, &incB, pText, pTextLen, cText );
+    CTR_Cipher( IV, 1, pText, pTextLen, cText );
     BURN_AFTER_READ
 }
 
@@ -1453,7 +1449,7 @@ char AES_SIV_decrypt( const uint8_t* keys, const block_t iv,
     IV[8] &= 0x7F;  IV[12] &= 0x7F;              /*  clear two bits           */
 
     AES_SetKey( keys + KEYSIZE );
-    CTR_Cipher( IV, 0, &incB, cText, cTextLen, pText );
+    CTR_Cipher( IV, 1, cText, cTextLen, pText );
     memset( IV, 0, sizeof IV );
     S2V( keys, aData, pText, aDataLen, cTextLen, IV );
     BURN_AFTER_READ
@@ -1521,7 +1517,7 @@ void AES_EAX_encrypt( const uint8_t* key, const uint8_t* nonce,
     memcpy( auTag, mac + 12, 4 );
     mac[12] &= 0x7F;                             /*  clear 2 bits to get N'   */
     mac[14] &= 0x7F;
-    CTR_Cipher( mac, 0, &incB, pText, pTextLen, cText );
+    CTR_Cipher( mac, 1, pText, pTextLen, cText );
 
     OMac( 2, D, K2, cText, pTextLen, tag );      /*  C' = CMAC'( ciphertext ) */
     for (*D = 0; *D < 4; ++*D)                   /*  using D[0] as counter!   */
@@ -1533,7 +1529,7 @@ void AES_EAX_encrypt( const uint8_t* key, const uint8_t* nonce,
     OMac( 1, D, K2, aData, aDataLen, tag );      /*  H = OMAC(1; adata)       */
     xorBlock( mac, tag );
     memcpy( auTag, tag, sizeof tag );
-    CTR_Cipher( mac, 0, &incB, pText, pTextLen, cText );
+    CTR_Cipher( mac, 1, pText, pTextLen, cText );
 
     OMac( 2, D, K2, cText, pTextLen, mac );      /*  C = OMAC(2; ciphertext)  */
     xorBlock( mac, auTag );                      /*  tag = N ^ H ^ C          */
@@ -1590,7 +1586,7 @@ char AES_EAX_decrypt( const uint8_t* key, const uint8_t* nonce,
         BURN_AFTER_READ
         return AUTHENTICATION_FAILURE;
     }
-    CTR_Cipher( mac, 0, &incB, cText, cTextLen, pText );
+    CTR_Cipher( mac, 1, cText, cTextLen, pText );
 
     BURN_AFTER_READ
     return ENDED_IN_SUCCESS;
@@ -1767,8 +1763,8 @@ char AES_OCB_decrypt( const uint8_t* key, const uint8_t* nonce,
 #if IMPLEMENT(GCM_SIV)
 
 /** calculates the POLYVAL of plaintext and AAD using authentication subkey H */
-static void Polyval( const block_t H, const void* pText, const void* aData,
-                     const size_t pTextLen, const size_t aDataLen, block_t pv )
+static void Polyval( const block_t H, const void* aData, const void* pText,
+                     const size_t aDataLen, const size_t pTextLen, block_t pv )
 {
     block_t buf = { 0 };                         /*  save bit-sizes into buf  */
     putValueL( buf, 0, aDataLen * 8 );
@@ -1815,7 +1811,7 @@ void GCM_SIV_encrypt( const uint8_t* key, const uint8_t* nonce,
     block_t AK, S = { 0 };
     DeriveKeys( key, nonce, AK );                /* get authentication subkey */
 
-    Polyval( AK, pText, aData, pTextLen, aDataLen, S );
+    Polyval( AK, aData, pText, aDataLen, pTextLen, S );
     for (*AK = 0; *AK < 12; ++*AK)
     {                                            /* use AK[0] as counter!     */
         S[*AK] ^= nonce[*AK];                    /* xor nonce with POLYVAL    */
@@ -1824,8 +1820,8 @@ void GCM_SIV_encrypt( const uint8_t* key, const uint8_t* nonce,
     RijndaelEncrypt( S, S );                     /* ..to get auth. tag        */
     memcpy( cText + pTextLen, S, sizeof S );
 
-    S[sizeof S - 1] |= 0x80;                     /* set 1 bit to get CTR I.V  */
-    CTR_Cipher( S, 0, &incL, pText, pTextLen, cText );
+    S[sizeof S - 1] |= 0x80;                     /* set 1 bit to get CTR's IV */
+    CTR_Cipher( S, 0, pText, pTextLen, cText );
     BURN_AFTER_READ
 }
 
@@ -1852,10 +1848,10 @@ char GCM_SIV_decrypt( const uint8_t* key, const uint8_t* nonce,
     DeriveKeys( key, nonce, AK );                /* get authentication subkey */
     memcpy( S, tag, sizeof S );                  /* tag contains counter I.V. */
     S[sizeof S - 1] |= 0x80;
-    CTR_Cipher( S, 0, &incL, cText, cTextLen - 16, pText );
+    CTR_Cipher( S, 0, cText, cTextLen - 16, pText );
 
     memset( S, 0, sizeof S );
-    Polyval( AK, pText, aData, cTextLen - 16, aDataLen, S );
+    Polyval( AK, aData, pText, aDataLen, cTextLen - 16, S );
     for (*AK = 0; *AK < 12; ++*AK)
     {                                            /* using AK[0] as counter!   */
         S[*AK] ^= nonce[*AK];                    /* xor nonce with POLYVAL    */

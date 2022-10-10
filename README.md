@@ -23,7 +23,7 @@ With that in mind, I shall say that the main purpose of developing µAES was pur
 
 * $\textrm{\textbf{Lightweight}}$ — the API has very little memory footprint and compiled code size. In my own tests and benchmarks, the amount of RAM used by the functions didn't exceed a few hundred bytes in most extreme cases. I might update this repo later with some of those benchmarks, and you are also cheerfully welcome to run yours.
 
-  Moreover, the ROM space of µAES is optimized as much as possible. For example, if you disable all other macros and just stick with the GCM, the compiled code size will be less than 3.5KB on an x86 machine for either AES-128-GCM or AES-256-GCM.
+  Moreover, the ROM space of µAES is optimized as much as possible. For example, if you disable all other macros and just stick with the GCM, the compiled code size will be about 3 KB with `gcc -Os` on x86 machine for either AES-128-GCM or AES-256-GCM.
 
 * $\textrm{\textbf{Fast}}$ — the encryption or decryption speed is often an order of magnitude higher than some .net based implementations and surprisingly, even a couple of C++ APIs. Since code simplicity and portability was a main concern, paralellization or advanced CPU optimizations are not a feature of µAES, which will affect its overall speed.
 

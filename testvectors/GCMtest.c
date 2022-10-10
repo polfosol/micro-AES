@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : GCMtest.c
  Author      : polfosol
- Version     : 1.5.1.0
+ Version     : 1.5.1.1
  Copyright   : copyright © 2022 - polfosol
  Description : illustrating how the NIST's vectors for AES-GCM mode are used
  ==============================================================================
@@ -99,7 +99,7 @@ int main()
         switch (i)
         {
         case 0:
-            skip |= (strlen(value) != 2 * AES_KEY_LENGTH);
+            skip = (strlen(value) != 2 * AES_KEY_LENGTH);
             if (!skip) str2bytes(value, key);
             break;
         case 1:

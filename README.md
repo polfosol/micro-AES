@@ -1,4 +1,3 @@
-
 # µAES
 
 **A minimalist ANSI-C compatible code for most of the AES-related algorithms**.
@@ -13,9 +12,9 @@ With that in mind, I shall say that the main purpose of developing µAES was pur
 
 ## Features
 
-* $\textrm{\textbf{Comprehensive}}$ — supports any form of the AES standard with all different key sizes, i.e. you can use AES-128 or AES-192 or AES-256 simply by setting a macro.
+* $\textrm{\textbf{Comprehensive}}$ — supports any form of the AES with all possible combinations of standard key sizes and block-cipher modes. e.g. AES-128-CBC or AES-192-GCM or AES-256-XTS are within reach simply by setting a couple of macros.
 
-* $\textrm{\textbf{All in one}}$ — all popular (and some unpopular) block ciphering modes of the AES are implemented into a single file; such as [**_ECB_**, **_CBC_**, **_CFB_**, **_OFB_**, **_CTR_**](https://csrc.nist.gov/publications/detail/sp/800-38a/final), [**_GCM_**](https://csrc.nist.gov/publications/detail/sp/800-38d/final), [**_CCM_**](https://csrc.nist.gov/publications/detail/sp/800-38c/final), [**_XTS_**](https://csrc.nist.gov/publications/detail/sp/800-38e/final), [**_OCB_**](https://www.rfc-editor.org/rfc/rfc7253.html), [**_EAX_**](https://en.wikipedia.org/wiki/EAX_mode), [**_KW_** (**_KWA_**)](https://csrc.nist.gov/publications/detail/sp/800-38f/final), [**_SIV_**](https://www.rfc-editor.org/rfc/rfc5297.html), [**_GCM-SIV_**](https://www.rfc-editor.org/rfc/rfc8452.html), FPE, and furthermore, a [**_CMAC_**](https://csrc.nist.gov/publications/detail/sp/800-38b/final) authentication API.
+* $\textrm{\textbf{All in one}}$ — all popular (and some unpopular) block ciphering modes of the AES are implemented into a single file; such as [**_ECB_**, **_CBC_**, **_CFB_**, **_OFB_**, **_CTR_**](https://csrc.nist.gov/publications/detail/sp/800-38a/final), [**_GCM_**](https://csrc.nist.gov/publications/detail/sp/800-38d/final), [**_CCM_**](https://csrc.nist.gov/publications/detail/sp/800-38c/final), [**_XTS_**](https://csrc.nist.gov/publications/detail/sp/800-38e/final), [**_OCB_**](https://www.rfc-editor.org/rfc/rfc7253.html), [**_EAX_**](https://en.wikipedia.org/wiki/EAX_mode), [**_KW_** (**_KWA_**)](https://csrc.nist.gov/publications/detail/sp/800-38f/final), [**_SIV_**](https://www.rfc-editor.org/rfc/rfc5297.html), [**_GCM-SIV_**](https://www.rfc-editor.org/rfc/rfc8452.html), [FPE](), and furthermore, authentication APIs for [**_CMAC_**](https://csrc.nist.gov/publications/detail/sp/800-38b/final) and [Poly1305-AES]().
 
 * $\textrm{\textbf{Clear and readable code}}$ — hopefully, the code is written in a layman-friendly way. Lots of comments are added along the way to make its purpose more understandable. Also the code styling is a bit different, and IMHO more eye-catching, than what you might see in other implementations.
 
@@ -23,9 +22,9 @@ With that in mind, I shall say that the main purpose of developing µAES was pur
 
 * $\textrm{\textbf{Lightweight}}$ — the API has very little memory footprint and compiled code size. In my own tests and benchmarks, the amount of RAM used by the functions didn't exceed a few hundred bytes in most extreme cases. I might update this repo later with some of those benchmarks, and you are also cheerfully welcome to run yours.
 
-  Moreover, the ROM space of µAES is optimized as much as possible. For example, if you disable all other macros and just stick with the GCM, the compiled code size will be about 3 KB with `gcc -Os` on x86 machine for either AES-128-GCM or AES-256-GCM.
+  Moreover, the ROM space of µAES is optimized as much as possible. For example, if you disable all other macros and just stick with the GCM, the compiled code size will be around **3KB** with `gcc -Os` on x86 machine for either AES-128-GCM or AES-256-GCM.
 
-* $\textrm{\textbf{Fast}}$ — the encryption or decryption speed is often an order of magnitude higher than some .net based implementations and surprisingly, even a couple of C++ APIs. Since code simplicity and portability was a main concern, paralellization or advanced CPU optimizations are not a feature of µAES, which will affect its overall speed.
+* $\textrm{\textbf{Fast}}$ — the encryption or decryption speed is fairly high, especially when there is no authentication. Some authentication functions may not look so efficient speed-wise, as they require large integer multiplications. But it's worth noting that faster methods are hardly portable or easy to understand. Furthermore, since code simplicity and portability was a main concern, paralellization or advanced CPU optimizations are not a feature of µAES —which will affect its overall speed.
 
   As a side note, speed is not always a blessing in cryptography and sometimes slower codes turn out to be more secure. One must be wary of those speedups that make the code more susceptible to [timing attacks](https://en.wikipedia.org/wiki/Timing_attack).
 
@@ -33,17 +32,17 @@ With that in mind, I shall say that the main purpose of developing µAES was pur
 
   You can even compile it with [Tiny C Compiler](https://bellard.org/tcc/):
 
-    ```
-    tcc -c main.c      -o main.o
-    tcc -c micro_aes.c -o micro_aes.o
-    tcc -o micro_aes.exe  main.o micro_aes.o
-    ```
+  ```
+  tcc -c main.c      -o main.o
+  tcc -c micro_aes.c -o micro_aes.o
+  tcc -o micro_aes.exe  main.o micro_aes.o
+  ```
 
 ## Remarks
 
 For the sake of simplicity, it is often assumed that the input parameters of the functions are well defined, and the user knows what they're doing. As a result, a bunch of error checks are just skipped. Obviously, this is a naive and sometimes dangerous assumption. One must be aware that in a serious application, anything can be fed into the functions and they must take all the necessary precautions for erroneous parameters.
 
-µAES is palpably influenced by [kokke's tiny-AES](https://github.com/kokke/tiny-AES-c) library, but I have made some modifications which makes it a bit smaller and faster. I shall give kudos to their great effort which paved the way for many other branches.
+Part of µAES is palpably influenced by [kokke's tiny-AES](https://github.com/kokke/tiny-AES-c) library, but I have made some modifications to make it smaller and more efficient. I shall give kudos to their great effort which paved the way for many other branches.
 
 All the contents of this repository (except the ones that I didn't write!) are subject to the terms of Apache 2.0 license.
 

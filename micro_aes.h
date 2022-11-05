@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.h
  Author      : polfosol
- Version     : 9.1.1.0
+ Version     : 9.5.0.0
  Copyright   : copyright © 2022 - polfosol
  Description : μAES ™ is a minimalist all-in-one library for AES encryption
  ==============================================================================
@@ -31,12 +31,11 @@ AES block-cipher modes of operation. The following modes can be enabled/disabled
 #define CTR          1     /* counter-block (NIST SP 800-38A)                 */
 #define XEX          1     /* xor-encrypt-xor (NIST SP 800-38E)               */
 #define KWA          1     /* key wrap with authentication (NIST SP 800-38F)  */
-#define FPE          1     /* format-preserving encryption (NIST SP 800-38G)  */
+#define FPE          0     /* format-preserving encryption (NIST SP 800-38G)  */
 #endif
 
 #if AEAD_MODES
 #define CMAC         1     /* message authentication code (NIST SP 800-38B)   */
-#define POLY1305     1     /* poly1305-AES mac (https://cr.yp.to/mac.html)    */
 
 #if CTR
 #define CCM          1     /* counter with CBC-MAC (RFC-3610 & SP 800-38C)    */
@@ -49,6 +48,8 @@ AES block-cipher modes of operation. The following modes can be enabled/disabled
 #if XEX
 #define OCB          1     /* offset codebook mode with PMAC (RFC-7253)       */
 #endif
+
+#define POLY1305     1     /* poly1305-AES mac (https://cr.yp.to/mac.html)    */
 #endif
 
 #if CBC
@@ -68,13 +69,13 @@ AES block-cipher modes of operation. The following modes can be enabled/disabled
 #endif
 
 #define WTF ! (POLY1305 || CMAC || BLOCKCIPHERS)
-#define MICRO_RJNDL WTF    /* none of above; just rijndael API. dude.., why?  */
+#define M_RIJNDAEL  WTF    /* none of above; just rijndael API. dude.., why?  */
 
 /**----------------------------------------------------------------------------
 Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
  -----------------------------------------------------------------------------*/
 
-#if ECB || CBC || XEX || KWA || MICRO_RJNDL
+#if ECB || CBC || XEX || KWA || M_RIJNDAEL
 #define DECRYPTION   1
 #endif
 
@@ -83,7 +84,7 @@ Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
 #endif
 
 #if CFB || OFB || CTR || OCB
-#define TAKE_PARTIAL_DATA  /* supports data units shorter than a full block.  */
+#define PARTIAL_DATA_PASS  /* supports data units shorter than a full block.  */
 #endif
 
 #if CTR_NA
@@ -123,7 +124,7 @@ extern "C" {
 /**----------------------------------------------------------------------------
 Encryption/decryption of a single block with Rijndael
  -----------------------------------------------------------------------------*/
-#if MICRO_RJNDL
+#if M_RIJNDAEL
 void AES_Cipher( const uint8_t* key,          /* encryption/decryption key    */
                  const char mode,             /* encrypt: 'E', decrypt: 'D'   */
                  const uint8_t* x,            /* input block byte array       */
@@ -239,11 +240,11 @@ void AES_SIV_encrypt( const uint8_t* keys,    /* encryption key pair          */
                       const size_t pTextLen,  /* length of input plain text   */
                       const uint8_t* aData,   /* added authentication data    */
                       const size_t aDataLen,  /* size of authentication data  */
-                      uint8_t* iv,            /* synthesized init-vector      */
+                      uint8_t* iv,            /* synthesized initial-vector   */
                       uint8_t* cText );       /* cipher-text result           */
 
 char AES_SIV_decrypt( const uint8_t* keys,    /* decryption key pair          */
-                      const uint8_t* iv,      /* provided init-vector         */
+                      const uint8_t* iv,      /* provided initial-vector      */
                       const uint8_t* cText,   /* cipher text                  */
                       const size_t cTextLen,  /* length of input cipher-text  */
                       const uint8_t* aData,   /* added authentication data    */
@@ -295,7 +296,6 @@ char AES_CCM_decrypt( const uint8_t* key,     /* decryption key               */
                       const size_t aDataLen,  /* size of authentication data  */
                       const uint8_t tagLen,   /* size of tag (if any)         */
                       uint8_t* pText );       /* plain-text result            */
-                      
 #endif /* CCM */
 
 /**----------------------------------------------------------------------------
@@ -319,7 +319,6 @@ char AES_OCB_decrypt( const uint8_t* key,     /* decryption key               */
                       const size_t aDataLen,  /* size of authentication data  */
                       const uint8_t tagLen,   /* size of tag (if any)         */
                       uint8_t* pText );       /* plain-text result            */
-                      
 #endif /* OCB */
 
 /**----------------------------------------------------------------------------
@@ -327,7 +326,7 @@ Main functions for EAX-AES mode; more info at the bottom of this document.
  -----------------------------------------------------------------------------*/
 #if EAX
 void AES_EAX_encrypt( const uint8_t* key,     /* encryption key               */
-                      const uint8_t* nonce,   /* initialization vector        */
+                      const uint8_t* nonce,   /* arbitrary-size nonce array   */
                       const uint8_t* pText,   /* plain text                   */
                       const size_t pTextLen,  /* length of input plain text   */
 #if EAXP
@@ -341,7 +340,7 @@ void AES_EAX_encrypt( const uint8_t* key,     /* encryption key               */
 #endif
 
 char AES_EAX_decrypt( const uint8_t* key,     /* decryption key               */
-                      const uint8_t* nonce,   /* initialization vector        */
+                      const uint8_t* nonce,   /* arbitrary-size nonce array   */
                       const uint8_t* cText,   /* cipher text + appended tag   */
                       const size_t cTextLen,  /* length of input cipher-text  */
 #if EAXP
@@ -400,14 +399,18 @@ Main functions for FPE-AES (to be added soon)
 #endif /* FPE */
 
 /**----------------------------------------------------------------------------
-Main function for Poly1305-AES message authentication code (to be added soon)
+Main function for Poly1305-AES message authentication code
  -----------------------------------------------------------------------------*/
 #if POLY1305
-
-#endif /* POLY1305 */
+void AES_Poly1305( const uint8_t* keys,       /* encryption/mixing key pair   */
+                   const uint8_t* nonce,      /* the 128-bit nonce            */
+                   const void* data,          /* input data buffer            */
+                   const size_t dataSize,     /* size of data in bytes        */
+                   uint8_t* mac );            /* calculated poly1305 hash     */
+#endif
 
 /**----------------------------------------------------------------------------
-Main function for AES cipher-based message authentication code
+Main function for AES Cipher-based Message Authentication Code
  -----------------------------------------------------------------------------*/
 #if CMAC
 void AES_CMAC( const uint8_t* key,            /* encryption/cipher key        */
@@ -437,26 +440,26 @@ The error codes and key length should be defined here for external references:
 #endif /* header guard */
 
 /**--------------------------------------------------------------------------**\
-=<              Notes and remarks about the above-defined macros              >=
- ------------------------------------------------------------------------------
+|               Notes and remarks about the above-defined macros               |
++------------------------------------------------------------------------------+
 
-* Some AES modes just use the 'encryption' part of the Rijndael algorithm. So if
+> Some AES modes just use the 'encryption' part of the Rijndael algorithm. So if
     you are NOT using the decryption functions of ECB/CBC/KWA/XEX modes, you can
     safely disable DECRYPTION macro and save a few kilobytes in compiled code.
 
-* In EBC/CBC/XEX modes, the size of input must be a multiple of block-size.
+> In EBC/CBC/XEX modes, the size of input must be a multiple of block-size.
     Otherwise it needs to be padded. The simplest (default) padding mode is to
     fill the rest of block by zeros. Supported standard padding methods are
     PKCS#7 and ISO/IEC 7816-4, which can be enabled by AES_PADDING macro.
 
-* In many texts, you may see that the words 'nonce' and 'initialization vector'
+> In many texts, you may see that the words 'nonce' and 'initialization vector'
     are used interchangeably. But they have a subtle difference. Sometimes nonce
     is a part of the I.V, which itself can either be a full block or a partial
     one. In CBC/CFB/OFB modes, the provided I.V must be a full block. In pure
     CTR mode (CTR_NA) you can either provide a 96-bit I.V and let the count
     start at CTR_STARTVALUE, or use a full block IV.
 
-* In AEAD modes, the size of nonce and tag might be a parameter of the algorithm
+> In AEAD modes, the size of nonce and tag might be a parameter of the algorithm
     such that changing them affect the results. The GCM/EAX modes support
     arbitrary sizes for nonce. In CCM, the nonce length may vary from 8 to 13
     bytes. Also the tag size is an EVEN number between 4..16. In OCB, only the
@@ -464,23 +467,23 @@ The error codes and key length should be defined here for external references:
     size is always 16 bytes which can later be truncated to desired values. So
     in encryption functions, the provided authTag buffer must be 16 bytes long.
 
-* For the EAX mode of operation, the IEEE-1703 standard defines EAX' which is a
+> For the EAX mode of operation, the IEEE-1703 standard defines EAX' which is a
     modified version that combines AAD and nonce. Also the tag size is fixed to
     4 bytes. So EAX-prime functions don't need to take additional authentication
     data and tag-size as separate parameters.
 
-* In SIV mode, multiple separate units of authentication headers can be provided
+> In SIV mode, multiple separate units of authentication headers can be provided
     for the nonce synthesis. Here we assume that only one unit of AAD (aData) is
     sufficient, which is practically true.
 
-* The key wrapping mode is also denoted by KW. In this mode, the input secret is
+> The key wrapping mode is also denoted by KW. In this mode, the input secret is
     divided into 64bit blocks. Number of blocks is at least 2, and it is assumed
     that no padding is required. For padding, the KWP mode is used which is
     easily implementable, but left as an exercise! In the NIST document you may
     find some mentions of TKW which is for 3DES and irrelevant here. Anyway, the
     wrapped output has an additional block, i.e. wrappedSize = secretSize + 8.
 
-* Let me explain three extra options that are defined in the source file. If the
+> Let me explain three extra options that are defined in the source file. If the
     length of the input cipher/plain text is 'always' less than 4KB, you can
     enable the SMALL_CIPHER macro to save a few bytes in the compiled code. Note
     that for key-wrapping, this limit is 42 blocks (336 bytes) of secret key.

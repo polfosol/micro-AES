@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.c
  Author      : polfosol
- Version     : 9.1.1.0
+ Version     : 9.5.0.0
  Copyright   : copyright © 2022 - polfosol
  Description : ANSI-C compatible implementation of µAES ™ library.
  ==============================================================================
@@ -25,8 +25,6 @@
 #define SMALL_CIPHER        0
 #define REDUCE_CODE_SIZE    1
 
-#define IMPLEMENT(x)  (x) > 0
-
 /** state_t represents rijndael state matrix. fixed-size memory blocks have an
  * essential role in all algorithms. so it may be a good aide for readability to
  * define a specific type and a function pointer that applies to these blocks */
@@ -39,6 +37,10 @@ typedef unsigned char count_t;
 #else
 typedef size_t   count_t;
 #endif
+
+#define Np  (BLOCKSIZE+1)    /* The length of a block with added carry byte.  */
+#define Nh  (BLOCKSIZE/2)    /* The length of a half-block!                   */
+#define IMPLEMENT(x)  (x) > 0
 
 /**--------------------------------------------------------------------------**\
                                Private variables:
@@ -164,7 +166,7 @@ static void KeyExpansion( const uint8_t* key )
     for (i = KEYSIZE; i < (ROUNDS + 1) * BLOCKSIZE; ++i)
     {
         switch (i % KEYSIZE)             /*  Constructing other round keys    */
-        {                                /*   ..based on the previous ones:   */
+        {                                /*  ..based on the previous ones:    */
         case 0:
             memcpy( RoundKey + i, RoundKey + i - KEYSIZE, KEYSIZE );
 
@@ -359,7 +361,7 @@ static void rijndaelDecrypt( const block_t input, block_t output )
 #endif /* DECRYPTION */
 
 
-#if MICRO_RJNDL
+#if M_RIJNDAEL
 /**
  * @brief   encrypt or decrypt a single block with a given key
  * @param   key       a byte array with a fixed size specified by KEYSIZE
@@ -380,59 +382,19 @@ void AES_Cipher( const uint8_t* key, const char mode, const block_t x, block_t y
  *                            Auxiliary Functions                             *
 \*----------------------------------------------------------------------------*/
 
-#define AES_SetKey(key)  KeyExpansion( key )
+#define AES_SetKey(key)     KeyExpansion( key )
 
-#ifdef AES_PADDING
-
-/** in ECB or CBC without CTS, the last (partial) block has to be padded .... */
-static char padBlock( const uint8_t* input, const uint8_t len, block_t output )
-{
-#if AES_PADDING == 2
-    memset( output + len, 0, BLOCKSIZE - len );  /*   ISO/IEC 7816-4 padding  */
-    output[len] = 0x80;
-#elif AES_PADDING
-    uint8_t p = BLOCKSIZE - len;                 /*   PKCS#7 padding          */
-    memset( output + len, p, p );
+#if INCREASE_SECURITY
+#define MISMATCH            constmemcmp          /*  constant-time comparison */
+#define SABOTAGE(buf, len)  memset( buf, 0, len )
+#define BURN(key)           memset( key, 0, sizeof key )
 #else
-    if (len == 0)  return 0;                     /*   default padding         */
-    memset( output + len, 0, BLOCKSIZE - len );
-#endif
-
-    memcpy( output, input, len );
-    return 1;
-}
-#endif /* PADDING */
-
-#if CTS || AEAD_MODES
-
-/** The input block `y` is xor-ed with `x` and then mixed with block `src`... */
-static void xorThenMix( const uint8_t* x, const uint8_t len,
-                        const block_t src, fmix_t mix, block_t y )
-{
-    uint8_t i;
-    for (i = 0; i < len; ++i)  y[i] ^= x[i];
-
-    mix( src, y );                               /*  Y = mix( S, Y ^ X )      */
-}
-#endif
-
-#if CTS || defined(TAKE_PARTIAL_DATA)
-
-/** Result of applying a function to block `b` is xor-ed with `x` up to length
- * `len` to get `y`. A temporary block, `tmp` holds the intermediate values.. */
-static void mixThenXor( const block_t b, fmix_t mix, block_t tmp,
-                        const uint8_t* x, const uint8_t len, uint8_t* y )
-{
-    uint8_t i;
-    if (len == 0)  return;
-
-    mix( b, tmp );
-    for (i = 0; i < len; ++i)  y[i] = tmp[i] ^ x[i];
-}
+#define MISMATCH            memcmp
+#define SABOTAGE(buf, len)  (void)  buf
+#define BURN(key)           (void)  key
 #endif
 
 #if SMALL_CIPHER
-
 #define putValueB(block, pos, val)  block[pos - 1] = val >> 8;  block[pos] = val
 #define putValueL(block, pos, val)  block[pos + 1] = val >> 8;  block[pos] = val
 #define xorWith(block, pos, val)    block[pos] ^= (val)
@@ -441,7 +403,7 @@ static void mixThenXor( const block_t b, fmix_t mix, block_t tmp,
 
 #if CTR
 
-/** increment value of counter block, regarding its endian-ness ............. */
+/** increment the value of a counter block, regarding its endian-ness ....... */
 static void incBlock( block_t block, const char big )
 {
     uint8_t i;
@@ -487,21 +449,68 @@ static void xorWith( uint8_t* block, uint8_t pos, size_t val )
 #endif
 #endif /* SMALL CIPHER */
 
-#if EAX || SIV || OCB || CMAC
+
+#ifdef AES_PADDING
+
+/** in ECB or CBC without CTS, the last (partial) block has to be padded .... */
+static char padBlock( const uint8_t* input, const uint8_t len, block_t output )
+{
+#if AES_PADDING == 2
+    memset( output + len, 0, BLOCKSIZE - len );  /*   ISO/IEC 7816-4 padding  */
+    output[len] = 0x80;
+#elif AES_PADDING
+    uint8_t p = BLOCKSIZE - len;                 /*   PKCS#7 padding          */
+    memset( output + len, p, p );
+#else
+    if (len == 0)  return 0;                     /*   default padding         */
+    memset( output + len, 0, BLOCKSIZE - len );
+#endif
+
+    memcpy( output, input, len );
+    return 1;
+}
+#endif /* PADDING */
+
+#if CTS || AEAD_MODES
+
+/** The input block `y` is xor-ed with `x` and then mixed with block `src`... */
+static void xorThenMix( const uint8_t* x, const uint8_t len,
+                        const block_t src, fmix_t mix, block_t y )
+{
+    uint8_t i;
+    for (i = 0; i < len; ++i)  y[i] ^= x[i];
+
+    mix( src, y );                               /*  Y = mix( S, Y ^ X )      */
+}
+#endif
+
+#if CTS || defined(PARTIAL_DATA_PASS)
+
+/** Result of applying a function to block `b` is xor-ed with `x` up to length
+ * `len` to get `y`. A temporary block, `tmp` holds the intermediate values.. */
+static void mixThenXor( const block_t b, fmix_t mix, block_t tmp,
+                        const uint8_t* x, const uint8_t len, uint8_t* y )
+{
+    uint8_t i;
+    if (len == 0)  return;
+
+    mix( b, tmp );
+    for (i = 0; i < len; ++i)  y[i] = tmp[i] ^ x[i];
+}
+#endif
+
+#if EAX && !EAXP || SIV || OCB || CMAC
 
 /** Multiply a block by two in Galois bit field GF(2^128): big-endian version */
 static void doubleGF128B( block_t block )
 {
-    uint8_t c = 0, m, i;
-    for (i = BLOCKSIZE; i--; )                   /* loop through bytes, from  */
-    {                                            /* ..last to first, carry    */
-        m = block[i] >> 7;                       /* ..the MSB, and then shift */
-        block[i] <<= 1;                          /* ..each byte to the left.  */
-        block[i] |= c;                           /* if carry was set, set LSB */
-        c = m;                                   /* ..and update carry bit    */
-    }
-                                                 /* if first MSB is carried:  */
-    if (c)  block[BLOCKSIZE - 1] ^= 0x87;        /*   B ^= 10000111b (B.E.)   */
+    int i, t = 0;
+    for (i = BLOCKSIZE; i--; t >>= 8)            /* loop from last to first,  */
+    {                                            /* left-shift each byte and  */
+        t |= block[i] << 1;                      /* ..add the previous MSB.   */
+        block[i] = (uint8_t) t;
+    }                                            /* if first MSB is carried:  */
+    if (t)  block[BLOCKSIZE - 1] ^= 0x87;        /*   B ^= 10000111b (B.E.)   */
 }
 #endif
 
@@ -510,15 +519,13 @@ static void doubleGF128B( block_t block )
 /** Multiply a block by two in GF(2^128) field: this is little-endian version */
 static void doubleGF128L( block_t block )
 {
-    uint8_t c = 0, m, i;
-    for (i = 0; i < BLOCKSIZE; ++i)              /* the same as doubleGF128B  */
+    int t = 0, i;
+    for (i = 0; i < BLOCKSIZE; t >>= 8)          /* the same as doubleGF128B  */
     {                                            /* ..but with reversed bytes */
-        m = block[i] >> 7;
-        block[i] <<= 1;
-        block[i] |= c;
-        c = m;
+        t |= block[i] << 1;
+        block[i++] = (uint8_t) t;
     }
-    if (c)  block[0] ^= 0x87;                    /*   B ^= 10000111b (L.E.)   */
+    if (t)  block[0] ^= 0x87;                    /*   B ^= 10000111b (L.E.)   */
 }
 #endif
 
@@ -527,15 +534,13 @@ static void doubleGF128L( block_t block )
 /** Divide a block by two in GF(2^128) field: used in big endian, 128bit mul. */
 static void halveGF128B( block_t block )
 {
-    uint8_t c = 0, l, i;
-    for (i = 0; i < BLOCKSIZE; ++i)              /* loop through bytes, from  */
-    {                                            /* ..first to last, carry    */
-        l = block[i] << 7;                       /* ..the LSB, and then shift */
-        block[i] >>= 1;                          /* ..each byte to the right. */
-        block[i] |= c;
-        c = l;
-    }                                            /* if last LSB 1 (odd block) */
-    if (c)  block[0] ^= 0xe1;                    /* .. B ^= 11100001b << 120  */
+    unsigned i, t = 0;
+    for (i = 0; i < BLOCKSIZE; t <<= 8)          /* loop first to last byte,  */
+    {                                            /* add the previous LSB then */
+        t |= block[i];                           /* ..shift it to the right.  */
+        block[i++] = (uint8_t) (t >> 1);
+    }                                            /* if block is odd (LSB = 1) */
+    if (t & 0x100)  block[0] ^= 0xe1;            /* .. B ^= 11100001b << 120  */
 }
 
 /** This function carries out multiplication in 128bit Galois field GF(2^128) */
@@ -545,9 +550,9 @@ static void mulGF128( const block_t x, block_t y )
 
     for (i = 0; i < BLOCKSIZE; ++i)
     {
-        for (j = 0x80; j != 0; j >>= 1)          /*  check all the bits of X, */
+        for (j = 0; j < 8; ++j)                  /*  check all the bits of X, */
         {
-            if (x[i] & j)                        /*  ..and if any bit is set  */
+            if (x[i] << j & 0x80)                /*  ..and if any bit is set  */
             {
                 xorBlock( y, result );           /*  M ^= Y                   */
             }
@@ -563,15 +568,13 @@ static void mulGF128( const block_t x, block_t y )
 /** Divide a block by two in GF(2^128) field: the little-endian version (duh) */
 static void halveGF128L( block_t block )
 {
-    uint8_t c = 0, l, i;
-    for (i = BLOCKSIZE; i--; )                   /* the same as halveGF128B   */
+    unsigned t = 0, i;
+    for (i = BLOCKSIZE; i--; t <<= 8)            /* the same as halveGF128B ↑ */
     {                                            /* ..but with reversed bytes */
-        l = block[i] << 7;
-        block[i] >>= 1;
-        block[i] |= c;
-        c = l;
+        t |= block[i];
+        block[i] = (uint8_t) (t >> 1);
     }
-    if (c)  block[BLOCKSIZE - 1] ^= 0xe1;        /*   B ^= 11100001b          */
+    if (t & 0x100)  block[BLOCKSIZE - 1] ^= 0xe1;
 }
 
 /** Dot multiplication in GF(2^128) field: used in POLYVAL hash for GCM-SIV.. */
@@ -579,12 +582,12 @@ static void dotGF128( const block_t x, block_t y )
 {
     uint8_t i, j, result[BLOCKSIZE] = { 0 };
 
-    for (i = BLOCKSIZE; i--; )                   /*  pretty much the same as  */
-    {                                            /*  ..(reversed) mulGF128    */
-        for (j = 0x80; j != 0; j >>= 1)
-        {
+    for (i = BLOCKSIZE; i--; )
+    {
+        for (j = 8; j--; )                       /*  pretty much the same as  */
+        {                                        /*  ..(reversed) mulGF128    */
             halveGF128L( y );
-            if (x[i] & j)
+            if (x[i] >> j & 1)
             {
                 xorBlock( y, result );
             }
@@ -615,6 +618,80 @@ static void getOffset( const block_t Ld, const count_t index, block_t delta )
 }
 #endif
 
+#if POLY1305
+
+/** compare a little-endian block with Poly1305; return sign of B - (2^130-5) */
+static int cmpWith1305( uint8_t* block )
+{
+    int i = BLOCKSIZE, c = 0xFC;
+    do
+        c -= 0xFF - block[i];
+    while (c == 0 && --i);                       /*   loop from MSB to LSB    */
+
+    return i ? c : block[0] - 0xFB;
+}
+
+/** derive modulo(2^130-5) for a little endian block, by repeated subtraction */
+static void modLBlock( uint8_t* block, uint8_t ovf )
+{
+    uint8_t i;
+    for (i = 1; ovf || cmpWith1305( block ) >= 0; i = 1)
+    {
+        if ((uint8_t) (block[0] += 5) < 5)       /*     while B >= (2^130-5)  */
+        {                                        /*     ..subtract it from B  */
+            while (!++block[i] && ++i < Np);     /* to get B - (2^130-5), we  */
+        }                                        /* ..first calculate (B + 5) */
+        ovf -= (block[BLOCKSIZE] < 4 && ovf);    /* ..then subtract 2 ^ 130   */
+        block[BLOCKSIZE] += 0xFC;                /* (since x - 4 ≡ x + 0xFC)  */
+    }
+}
+
+/** add two little-endian poly1305 blocks. use modular addition if necessary. */
+static void addLBlocks( const uint8_t* x, const uint8_t len, uint8_t* y )
+{
+    int s = 0, i;
+    for (i = 0; i < len; s >>= 8)
+    {
+        s += x[i] + y[i];
+        y[i++] = (uint8_t) s;                    /*  s >> 8 is the overflow   */
+    }
+    if (len == Np)  modLBlock( y, (uint8_t) s );
+}
+
+/** modular multiplication of a block by 2^s, i.e. left shift block to s bits */
+static void shiftLBlock( uint8_t* block, const uint8_t shl )
+{
+    unsigned i, t = 0;
+    for (i = 0; i < Np; t >>= 8)                 /*  similar to doubleGF128L  */
+    {
+        t |= block[i] << shl;                    /*  shl may vary from 1 to 8 */
+        block[i++] = (uint8_t) t;
+    }
+    modLBlock( block, (uint8_t) t );
+}
+
+/** modular multiplication of two little-endian poly1305 blocks. y *= x mod P */
+static void mulLBlocks( const uint8_t* x, uint8_t* y )
+{
+    uint8_t i, b, t, nz, result[Np] = { 0 };
+
+    for (i = 0; i < Np; ++i)
+    {
+        for (t = x[i], b = 1; b != 0; )          /*  check every bit of x[i]  */
+        {                                        /*  ..and if any bit was set */
+            if (t & b)                           /*  ..add y to the result.   */
+            {                                    /*  then, calculate the      */
+                addLBlocks( y, Np, result );     /*  ..distance to the next   */
+                t ^= b;                          /*  ..set bit, i.e. nz       */
+            }
+            for (nz = 0; !(t & b) && b; ++nz)  b <<= 1;
+            shiftLBlock( y, nz );
+        }
+    }
+    memcpy( y, result, sizeof result );          /*  result is saved into y   */
+}
+#endif /* POLY1305 */
+
 #if AEAD_MODES
 
 /** the overall scheme of CMAC or GMAC hash functions: divide data into 128-bit
@@ -635,25 +712,29 @@ static void MAC( const void* data, const size_t dataSize,
     xorThenMix( x, r, seed, mix, result );       /*  ..partial block (if any) */
 }
 
+#if INCREASE_SECURITY
+
+/** for constant-time comparison of memory blocks, to avoid timing attacks:   */
+static uint8_t constmemcmp( const uint8_t* src, const uint8_t* dst, uint8_t len )
+{
+    uint8_t i, cmp = 0;
+    for (i = 0; i < len; ++i)  cmp |= src[i] ^ dst[i];
+    return cmp;
+}
+#endif
+
 #if CMAC || SIV || EAX
 
+typedef void (*fdouble_t)(block_t);              /* block-double function ptr */
+
 /** calculate key-dependent constants D and Q for CMAC, regarding endianness: */
-static void getSubkeys( const uint8_t* key, const int LE, block_t D, block_t Q )
+static void getSubkeys( const uint8_t* key, fdouble_t dou, block_t D, block_t Q )
 {
     AES_SetKey( key );
     rijndaelEncrypt( D, D );                     /*  H or L_* = Enc(zeros)    */
-    if (LE)                                      /*  little endian!           */
-    {
-#if EAXP
-        doubleGF128L( D );                       /*  D or L_$ = double(L_*)   */
-        memcpy( Q, D, BLOCKSIZE );
-        doubleGF128L( Q );                       /*  Q or L_0 = double(L_$)   */
-        return;
-#endif
-    }
-    doubleGF128B( D );
+    dou( D );                                    /*  D or L_$ = double(L_*)   */
     memcpy( Q, D, BLOCKSIZE );
-    doubleGF128B( Q );
+    dou( Q );                                    /*  Q or L_0 = double(L_$)   */
 }
 
 /** calculate the CMAC hash of input data using pre-calculated keys: D and Q. */
@@ -673,24 +754,6 @@ static void cMac( const block_t D, const block_t Q,
 }
 #endif
 #endif /* AEAD */
-
-#if INCREASE_SECURITY
-
-/** for constant-time comparison of memory blocks, to avoid timing attacks:   */
-static uint8_t secure_cmp( const uint8_t* src, const uint8_t* dst, uint8_t len )
-{
-    uint8_t i, cmp = 0;
-    for (i = 0; i < len; ++i)  cmp |= src[i] ^ dst[i];
-    return cmp;
-}
-
-#define BURN_AFTER_READ  memset( RoundKey, 0, sizeof RoundKey );
-#define SABOTAGE_RESULT  memset( pText, 0, cTextLen );
-#else
-#define secure_cmp       memcmp                  /* it's not secure actually! */
-#define BURN_AFTER_READ
-#define SABOTAGE_RESULT
-#endif
 
 #define GOTO_NEXT_BLOCK  x += BLOCKSIZE;   y += BLOCKSIZE;
 
@@ -722,7 +785,7 @@ void AES_ECB_encrypt( const uint8_t* key,
     {
         rijndaelEncrypt( y, y );
     }
-    BURN_AFTER_READ
+    BURN( RoundKey );
 }
 
 /**
@@ -745,7 +808,7 @@ char AES_ECB_decrypt( const uint8_t* key,
         rijndaelDecrypt( x, y );                 /*  P = Dec(C)               */
         GOTO_NEXT_BLOCK
     }
-    BURN_AFTER_READ
+    BURN( RoundKey );
 
     /* if padding is enabled, check whether the result is properly padded. error
      * must be thrown if it's not. we skip this here and just check the size. */
@@ -803,7 +866,7 @@ char AES_CBC_encrypt( const uint8_t* key, const block_t iVec,
         rijndaelEncrypt( y, y );
 #endif
     }
-    BURN_AFTER_READ
+    BURN( RoundKey );
     return ENDED_IN_SUCCESS;
 }
 
@@ -846,7 +909,7 @@ char AES_CBC_decrypt( const uint8_t* key, const block_t iVec,
         xorBlock( iv, y );                       /*  P1 = IV ^ Dec(T)         */
     }
 #endif
-    BURN_AFTER_READ
+    BURN( RoundKey );
 
     /* note: if padding was applied, check whether output is properly padded. */
     return !CTS && r ? DECRYPTION_FAILURE : ENDED_IN_SUCCESS;
@@ -883,7 +946,7 @@ static void CFB_Cipher( const uint8_t* key, const block_t iVec, const char mode,
         GOTO_NEXT_BLOCK
     }
     mixThenXor( iv, &rijndaelEncrypt, tmp, x, dataSize % BLOCKSIZE, y );
-    BURN_AFTER_READ
+    BURN( RoundKey );
 }
 
 /**
@@ -945,7 +1008,7 @@ void AES_OFB_encrypt( const uint8_t* key, const block_t iVec,
         y += BLOCKSIZE;
     }
     mixThenXor( iv, &rijndaelEncrypt, iv, y, pTextLen % BLOCKSIZE, y );
-    BURN_AFTER_READ
+    BURN( RoundKey );
 }
 
 /**
@@ -981,20 +1044,20 @@ static void CTR_Cipher( const block_t iCtr, const char big,
                         const void* input, const size_t dataSize, void* output )
 {
     uint8_t const *x = input;
-    uint8_t *y = output, ct[BLOCKSIZE];
+    uint8_t *y = output, c[BLOCKSIZE];
     count_t n = dataSize / BLOCKSIZE;
 
-    memcpy( ct, iCtr, sizeof ct );
-    if (big > 1)  incBlock( ct, 1 );             /* pre-increment for CCM/GCM */
+    memcpy( c, iCtr, sizeof c );
+    if (big > 1)  incBlock( c, 1 );              /* pre-increment for CCM/GCM */
 
     while (n--)
     {
-        rijndaelEncrypt( ct, y );                /*  both in en[de]cryption:  */
+        rijndaelEncrypt( c, y );                 /*  both in en[de]cryption:  */
         xorBlock( x, y );                        /*  Y = Enc(Ctr) ^ X         */
-        incBlock( ct, big );                     /*  Ctr_next = Ctr + 1       */
+        incBlock( c, big );                      /*  Ctr_next = Ctr + 1       */
         GOTO_NEXT_BLOCK
     }
-    mixThenXor( ct, &rijndaelEncrypt, ct, x, dataSize % BLOCKSIZE, y );
+    mixThenXor( c, &rijndaelEncrypt, c, x, dataSize % BLOCKSIZE, y );
 }
 #endif
 
@@ -1018,7 +1081,7 @@ void AES_CTR_encrypt( const uint8_t* key, const uint8_t* iv,
 #endif
     AES_SetKey( key );
     CTR_Cipher( ctr, 1, pText, pTextLen, cText );
-    BURN_AFTER_READ
+    BURN( RoundKey );
 }
 
 /**
@@ -1112,7 +1175,7 @@ char AES_XTS_encrypt( const uint8_t* keys, const uint8_t* twkId,
         xorBlock( T, c );
     }
 
-    BURN_AFTER_READ
+    BURN( RoundKey );
     return ENDED_IN_SUCCESS;
 }
 
@@ -1150,7 +1213,7 @@ char AES_XTS_decrypt( const uint8_t* keys, const uint8_t* twkId,
     rijndaelDecrypt( p, p );
     xorBlock( T, p );
 
-    BURN_AFTER_READ
+    BURN( RoundKey );
     return ENDED_IN_SUCCESS;
 }
 #endif /* XTS */
@@ -1172,8 +1235,9 @@ void AES_CMAC( const uint8_t* key,
 {
     block_t K1 = { 0 }, K2;
     memset( mac, 0, BLOCKSIZE );
-    getSubkeys( key, 0, K1, K2 );
+    getSubkeys( key, &doubleGF128B, K1, K2 );
     cMac( K1, K2, data, dataSize, mac );
+    BURN( RoundKey );
 }
 #endif /* CMAC */
 
@@ -1197,8 +1261,8 @@ static void GHash( const block_t H, const void* aData, const void* cText,
 }
 
 /** encrypt zeros to get authentication subkey H, and prepare the IV for GCM. */
-static void GCM_GetIVH( const uint8_t* key,
-                        const uint8_t* nonce, block_t authKey, block_t iv )
+static void GInitialize( const uint8_t* key,
+                         const uint8_t* nonce, block_t authKey, block_t iv )
 {
     AES_SetKey( key );
     rijndaelEncrypt( authKey, authKey );         /* authKey = Enc(zero block) */
@@ -1227,11 +1291,11 @@ void AES_GCM_encrypt( const uint8_t* key, const uint8_t* nonce,
                       uint8_t* cText, block_t auTag )
 {
     block_t H = { 0 }, iv = { 0 }, gsh = { 0 };
-    GCM_GetIVH( key, nonce, H, iv );             /*  get IV & auth. subkey H  */
+    GInitialize( key, nonce, H, iv );            /*  get IV & auth. subkey H  */
 
     CTR_Cipher( iv, 2, pText, pTextLen, cText );
     rijndaelEncrypt( iv, auTag );                /*  tag = Enc(iv) ^ GHASH    */
-    BURN_AFTER_READ
+    BURN( RoundKey );
     GHash( H, aData, cText, aDataLen, pTextLen, gsh );
     xorBlock( gsh, auTag );
 }
@@ -1254,18 +1318,18 @@ char AES_GCM_decrypt( const uint8_t* key, const uint8_t* nonce,
                       const uint8_t tagLen, uint8_t* pText )
 {
     block_t H = { 0 }, iv = { 0 }, gsh = { 0 };
-    GCM_GetIVH( key, nonce, H, iv );
+    GInitialize( key, nonce, H, iv );
     GHash( H, aData, cText, aDataLen, cTextLen, gsh );
 
     rijndaelEncrypt( iv, H );
     xorBlock( H, gsh );                          /*   tag = Enc(iv) ^ GHASH   */
-    if (secure_cmp( gsh, cText + cTextLen, tagLen ))
+    if (MISMATCH( gsh, cText + cTextLen, tagLen ))
     {                                            /*  compare tags and         */
-        BURN_AFTER_READ                          /*  ..proceed if they match  */
+        BURN( RoundKey );                        /*  ..proceed if they match  */
         return AUTHENTICATION_FAILURE;
     }
     CTR_Cipher( iv, 2, cText, cTextLen, pText );
-    BURN_AFTER_READ
+    BURN( RoundKey );
     return ENDED_IN_SUCCESS;
 }
 #endif /* GCM */
@@ -1334,7 +1398,7 @@ void AES_CCM_encrypt( const uint8_t* key, const uint8_t* nonce,
     CTR_Cipher( iv, 2, pText, pTextLen, cText );
     rijndaelEncrypt( iv, auTag );
     xorBlock( cm, auTag );                       /*  tag = Enc(iv) ^ CBC-MAC  */
-    BURN_AFTER_READ
+    BURN( RoundKey );
 }
 
 /**
@@ -1361,12 +1425,12 @@ char AES_CCM_decrypt( const uint8_t* key, const uint8_t* nonce,
     CTR_Cipher( iv, 2, cText, cTextLen, pText );
     CBCMac( iv, aData, pText, aDataLen, cTextLen, cm );
     rijndaelEncrypt( iv, iv );                   /*  tag = Enc(iv) ^ CBC-MAC  */
-    BURN_AFTER_READ
+    BURN( RoundKey );
 
     xorBlock( iv, cm );                          /*  verify the resulting tag */
-    if (secure_cmp( cm, cText + cTextLen, tagLen ))
+    if (MISMATCH( cm, cText + cTextLen, tagLen ))
     {
-        SABOTAGE_RESULT
+        SABOTAGE( pText, cTextLen );
         return AUTHENTICATION_FAILURE;
     }
     return ENDED_IN_SUCCESS;
@@ -1386,9 +1450,9 @@ static void S2V( const uint8_t* key,
 {
     block_t T = { 0 }, D = { 0 }, Q;
     uint8_t r = pTextLen >= BLOCKSIZE ? BLOCKSIZE : pTextLen % BLOCKSIZE;
-    uint8_t const *x = (uint8_t const*) pText - r + pTextLen;
+    uint8_t const* x = (uint8_t const*) pText - r + pTextLen;
 
-    getSubkeys( key, 0, D, Q );
+    getSubkeys( key, &doubleGF128B, D, Q );
     cMac( D, Q, T, sizeof T, T );                /*  T_0 = CMAC(zero block)   */
     if (aDataLen)                                /*  process each ADATA unit  */
     {                                            /*  ..the same way as this:  */
@@ -1430,7 +1494,7 @@ void AES_SIV_encrypt( const uint8_t* keys,
 
     AES_SetKey( keys + KEYSIZE );
     CTR_Cipher( IV, 1, pText, pTextLen, cText );
-    BURN_AFTER_READ
+    BURN( RoundKey );
 }
 
 /**
@@ -1457,11 +1521,11 @@ char AES_SIV_decrypt( const uint8_t* keys, const block_t iv,
     CTR_Cipher( IV, 1, cText, cTextLen, pText );
     memset( IV, 0, sizeof IV );
     S2V( keys, aData, pText, aDataLen, cTextLen, IV );
-    BURN_AFTER_READ
+    BURN( RoundKey );
 
-    if (secure_cmp( IV, iv, sizeof IV ))         /* verify the synthesized IV */
+    if (MISMATCH( IV, iv, sizeof IV ))           /* verify the synthesized IV */
     {
-        SABOTAGE_RESULT
+        SABOTAGE( pText, cTextLen );
         return AUTHENTICATION_FAILURE;
     }
     return ENDED_IN_SUCCESS;
@@ -1478,17 +1542,17 @@ char AES_SIV_decrypt( const uint8_t* keys, const block_t iv,
 static void OMac( const uint8_t t, const block_t D, const block_t Q,
                   const void* data, const size_t dataSize, block_t mac )
 {
+    block_t M = { 0 };
 #if EAXP
-    if (dataSize == 0 && t)  return;             /*  ignore null ciphertext   */
-    memcpy( mac, t ? Q : D, BLOCKSIZE );
+    memcpy( mac, t ? (dataSize ? Q : M) : D, sizeof M );
+    if (dataSize || !t)                          /*   ignore null ciphertext  */
 #else
-    block_t O = { 0 };
     if (dataSize == 0)
     {
-        memcpy( O, D, sizeof O );                /*  OMAC = Enc( D ^ [t]_n )  */
+        memcpy( M, D, sizeof M );                /*  OMAC = Enc( D ^ [t]_n )  */
     }
-    O[sizeof O - 1] ^= t;                        /*  else: C1 = Enc( [t]_n )  */
-    rijndaelEncrypt( O, mac );
+    M[sizeof M - 1] ^= t;                        /*  else: C1 = Enc( [t]_n )  */
+    rijndaelEncrypt( M, mac );
 #endif
     cMac( D, Q, data, dataSize, mac );
 }
@@ -1509,13 +1573,15 @@ void AES_EAX_encrypt( const uint8_t* key, const uint8_t* nonce,
                       const uint8_t* pText, const size_t pTextLen,
 #if EAXP
                       const size_t nonceLen, uint8_t* cText )
+#define blockMul2     doubleGF128L
 #else
                       const uint8_t* aData, const size_t aDataLen,
                       uint8_t* cText, uint8_t* auTag )
+#define blockMul2     doubleGF128B
 #endif
 {
-    block_t mac, tag = { 0 }, D = { 0 }, K2;
-    getSubkeys( key, EAXP, D, K2 );
+    block_t mac, tag, D = { 0 }, K2;
+    getSubkeys( key, &blockMul2, D, K2 );
 
 #if EAXP
     OMac( 0, D, K2, nonce, nonceLen, mac );      /*  N = CMAC'( nonce )       */
@@ -1539,7 +1605,7 @@ void AES_EAX_encrypt( const uint8_t* key, const uint8_t* nonce,
     OMac( 2, D, K2, cText, pTextLen, mac );      /*  C = OMAC(2; ciphertext)  */
     xorBlock( mac, auTag );                      /*  tag = N ^ H ^ C          */
 #endif
-    BURN_AFTER_READ
+    BURN( RoundKey );
 }
 
 /**
@@ -1565,8 +1631,8 @@ char AES_EAX_decrypt( const uint8_t* key, const uint8_t* nonce,
 #endif
                       uint8_t* pText )
 {
-    block_t mac, tag = { 0 }, D = { 0 }, K2;
-    getSubkeys( key, EAXP, D, K2 );
+    block_t mac, tag, D = { 0 }, K2;
+    getSubkeys( key, &blockMul2, D, K2 );
     OMac( 2, D, K2, cText, cTextLen, tag );      /*  C = OMAC(2; ciphertext)  */
 
 #if EAXP
@@ -1584,15 +1650,15 @@ char AES_EAX_decrypt( const uint8_t* key, const uint8_t* nonce,
     OMac( 0, D, K2, nonce, EAX_NONCE_LEN, mac );
     xorBlock( mac, tag );                        /*  tag = N ^ H ^ C          */
 
-    if (secure_cmp( tag, cText + cTextLen, tagLen ))
+    if (MISMATCH( tag, cText + cTextLen, tagLen ))
 #endif
     {                                            /* authenticate then decrypt */
-        BURN_AFTER_READ
+        BURN( RoundKey );
         return AUTHENTICATION_FAILURE;
     }
     CTR_Cipher( mac, 1, cText, cTextLen, pText );
 
-    BURN_AFTER_READ
+    BURN( RoundKey );
     return ENDED_IN_SUCCESS;
 }
 #endif /* EAX */
@@ -1644,14 +1710,13 @@ static void OCB_Cipher( const uint8_t* nonce, fmix_t cipher,
     {
         memcpy( Del, Kt, BLOCKSIZE );            /*  initialize Δ_0           */
     }
-    for (i = 0; i < n; )
+    for (i = 0; i < n; y += BLOCKSIZE)
     {
         memcpy( Del, Kt, BLOCKSIZE );            /*  calculate Δ_i using my   */
         getOffset( Ld, ++i, Del );               /*  .. 'magic' algorithm     */
         xorBlock( Del, y );
         cipher( y, y );                          /* Y = Δ_i ^ Cipher(Δ_i ^ X) */
         xorBlock( Del, y );
-        y += BLOCKSIZE;
     }
     if (r)                                       /*  Δ_* = Δ_n ^ L_* and then */
     {                                            /*  Y_* = Enc(Δ_*) ^ X       */
@@ -1671,24 +1736,24 @@ static void OCB_GetTag( const block_t Ds,
                         block_t tag )
 {
     uint8_t const r = aDataLen % BLOCKSIZE, *x = aData;
-    count_t i = 0, n = aDataLen / BLOCKSIZE;
+    count_t i, n = aDataLen / BLOCKSIZE;
 
     block_t S = { 0 };                           /*  checksum, i.e.           */
     MAC( pText, pTextLen, NULL, &nop, S );       /*  ..xor of all plaintext   */
 
-    xorThenMix( Ds, sizeof S, Ld, &xorBlock, S );
+    xorBlock( Ds, S );
+    xorBlock( Ld, S );
     rijndaelEncrypt( S, tag );                   /* Tag0 = Enc(L_$ ^ Δ_* ^ S) */
     if (aDataLen == 0)  return;
 
     memset( S, 0, sizeof S );                    /*  PMAC authentication:     */
-    while (i < n)
+    for (i = 0; i < n; x += BLOCKSIZE)
     {
         getOffset( Ld, ++i, S );
         xorBlock( x, S );
         rijndaelEncrypt( S, S );                 /*  S_i = Enc(A_i ^ Δ_i)     */
         xorBlock( S, tag );                      /*  Tag_{i+1} = Tag_i ^ S_i  */
         memset( S, 0, sizeof S );
-        x += BLOCKSIZE;
     }
     if (r)
     {
@@ -1723,7 +1788,7 @@ void AES_OCB_encrypt( const uint8_t* key, const uint8_t* nonce,
     AES_SetKey( key );
     OCB_Cipher( nonce, &rijndaelEncrypt, pText, pTextLen, Ls, Ld, delta, cText );
     OCB_GetTag( delta, Ls, Ld, pText, aData, pTextLen, aDataLen, auTag );
-    BURN_AFTER_READ
+    BURN( RoundKey );
 }
 
 /**
@@ -1747,11 +1812,11 @@ char AES_OCB_decrypt( const uint8_t* key, const uint8_t* nonce,
     AES_SetKey( key );
     OCB_Cipher( nonce, &rijndaelDecrypt, cText, cTextLen, Ls, Ld, delta, pText );
     OCB_GetTag( delta, Ls, Ld, pText, aData, cTextLen, aDataLen, delta );
-    BURN_AFTER_READ                              /* saved the tag into delta! */
+    BURN( RoundKey );                            /* saved the tag into delta! */
 
-    if (secure_cmp( delta, cText + cTextLen, tagLen ))
+    if (MISMATCH( delta, cText + cTextLen, tagLen ))
     {
-        SABOTAGE_RESULT
+        SABOTAGE( pText, cTextLen );
         return AUTHENTICATION_FAILURE;
     }
     return ENDED_IN_SUCCESS;
@@ -1778,7 +1843,7 @@ static void Polyval( const block_t H, const void* aData, const void* pText,
 }
 
 /** derive the pair of authentication-encryption-keys from main key and nonce */
-static void DeriveKeys( const uint8_t* key, const uint8_t* nonce, block_t AK )
+static void DeriveGSKeys( const uint8_t* key, const uint8_t* nonce, block_t AK )
 {
     uint8_t AEKeypair[KEYSIZE + 24], *k = AEKeypair;
     block_t iv = { 0 };
@@ -1811,7 +1876,7 @@ void GCM_SIV_encrypt( const uint8_t* key, const uint8_t* nonce,
                       uint8_t* cText, block_t auTag )
 {
     block_t H, S = { 0 };
-    DeriveKeys( key, nonce, H );                 /* get authentication subkey */
+    DeriveGSKeys( key, nonce, H );               /* get authentication subkey */
 
     Polyval( H, aData, pText, aDataLen, pTextLen, S );
     for (*H = 0; *H < 12; ++*H)
@@ -1824,7 +1889,7 @@ void GCM_SIV_encrypt( const uint8_t* key, const uint8_t* nonce,
 
     S[sizeof S - 1] |= 0x80;                     /* set 1 bit to get CTR's IV */
     CTR_Cipher( S, 0, pText, pTextLen, cText );
-    BURN_AFTER_READ
+    BURN( RoundKey );
 }
 
 /**
@@ -1847,7 +1912,7 @@ char GCM_SIV_decrypt( const uint8_t* key, const uint8_t* nonce,
     block_t H, S;
     if (tagLen < sizeof S)  return DECRYPTION_FAILURE;
 
-    DeriveKeys( key, nonce, H );                 /* get authentication subkey */
+    DeriveGSKeys( key, nonce, H );               /* get authentication subkey */
     memcpy( S, cText + cTextLen, sizeof S );     /* tag is IV for CTR cipher  */
     S[sizeof S - 1] |= 0x80;
     CTR_Cipher( S, 0, cText, cTextLen, pText );
@@ -1861,10 +1926,10 @@ char GCM_SIV_decrypt( const uint8_t* key, const uint8_t* nonce,
     S[sizeof S - 1] &= 0x7F;                     /* clear one bit & encrypt,  */
     rijndaelEncrypt( S, S );                     /* ..to get tag & verify it  */
 
-    BURN_AFTER_READ
-    if (secure_cmp( S, cText + cTextLen, sizeof S ))
+    BURN( RoundKey );
+    if (MISMATCH( S, cText + cTextLen, sizeof S ))
     {                                            /*  tag verification failed  */
-        SABOTAGE_RESULT
+        SABOTAGE( pText, cTextLen );
         return AUTHENTICATION_FAILURE;
     }
     return ENDED_IN_SUCCESS;
@@ -1873,10 +1938,9 @@ char GCM_SIV_decrypt( const uint8_t* key, const uint8_t* nonce,
 
 
 /**--------------------------------------------------------------------------**\
-                  AES key-wrapping functions based on RFC-3394
+             KW-AES: Main functions for AES key-wrapping (RFC-3394)
 \*----------------------------------------------------------------------------*/
 #if IMPLEMENT(KWA)
-#define Nh  (BLOCKSIZE/2)
 /**
  * @brief   wrap the input secret whose size is a multiple of 8 and >= 16
  * @param   kek       key-encryption-key a.k.a master key
@@ -1888,7 +1952,7 @@ void AES_KEY_wrap( const uint8_t* kek,
                    const uint8_t* secret, const size_t secretLen, uint8_t* wrapped )
 {
     uint8_t A[BLOCKSIZE], *r, i;
-    count_t j, n = secretLen / Nh;               /*  number of half-blocks    */
+    count_t j, ns = secretLen / Nh;              /*  number of semi-blocks    */
 
     memset( A, 0xA6, Nh );                       /*  initialization vector    */
     memcpy( wrapped + Nh, secret, secretLen );   /*  copy input to the output */
@@ -1897,16 +1961,16 @@ void AES_KEY_wrap( const uint8_t* kek,
     for (i = 0; i < 6; ++i)
     {
         r = wrapped;
-        for (j = 0; j++ < n; )
+        for (j = 0; j++ < ns; )
         {
             r += Nh;
             memcpy( A + Nh, r, Nh );             /*  B = Enc(A | R[j])        */
             rijndaelEncrypt( A, A );             /*  R[j] = LSB(64, B)        */
             memcpy( r, A + Nh, Nh );             /*  A = MSB(64, B) ^ t       */
-            xorWith( A, 7, n * i + j );
+            xorWith( A, 7, ns * i + j );
         }
     }
-    BURN_AFTER_READ
+    BURN( RoundKey );
 
     memcpy( wrapped, A, Nh );
 }
@@ -1923,7 +1987,7 @@ char AES_KEY_unwrap( const uint8_t* kek,
                      const uint8_t* wrapped, const size_t wrapLen, uint8_t* secret )
 {
     uint8_t A[BLOCKSIZE], *r, i;
-    count_t j, n = wrapLen / Nh - 1;             /*  number of half-blocks    */
+    count_t j, ns = wrapLen / Nh - 1;            /*  number of semi-blocks    */
 
     memcpy( A, wrapped, Nh );                    /*  authentication vector    */
     memcpy( secret, wrapped + Nh, wrapLen - Nh );
@@ -1931,20 +1995,78 @@ char AES_KEY_unwrap( const uint8_t* kek,
     AES_SetKey( kek );
     for (i = 6; i--; )
     {
-        r = secret + n * Nh;
-        for (j = n; j; --j)
+        r = secret + ns * Nh;
+        for (j = ns; j; --j)
         {
             r -= Nh;
-            xorWith( A, 7, n * i + j );
+            xorWith( A, 7, ns * i + j );
             memcpy( A + Nh, r, Nh );             /*  B = Dec(A ^ t | R[j])    */
             rijndaelDecrypt( A, A );             /*  A = MSB(64, B)           */
             memcpy( r, A + Nh, Nh );             /*  R[j] = LSB(64, B)        */
         }
     }
-    while (++i < Nh)  j |= A[i] ^ 0xA6;          /*  authenticate/error check */
+    while (++i != Nh)  j |= A[i] ^ 0xA6;         /*  authenticate/error check */
 
-    BURN_AFTER_READ
+    BURN( RoundKey );
     return j ? DECRYPTION_FAILURE : ENDED_IN_SUCCESS;
 }
 #undef Nh
 #endif /* KWA */
+
+
+/**--------------------------------------------------------------------------**\
+             Main function for Poly1305-AES message authentication
+\*----------------------------------------------------------------------------*/
+#if IMPLEMENT(POLY1305)
+/**
+ * @brief   derive the Poly1305-AES hash of message using a nonce and key pair.
+ * @param   keys      pair of encryption/mixing keys (k, r); size = KEYSIZE + 16
+ * @param   nonce     a 128 bit string which is encrypted by AES_k
+ * @param   data      buffer of input data
+ * @param   dataSize  size of data in bytes
+ * @param   mac       calculated CMAC hash
+ */
+void AES_Poly1305( const uint8_t* keys, const block_t nonce,
+                   const void* data, const size_t dataSize, block_t mac )
+{
+    uint8_t r[Np], result[Np] = { 0 }, c[Np] = { 0 }, rn[Np] = { 1 };
+    uint8_t i = dataSize > 0;
+    uint8_t m = (dataSize - i) % BLOCKSIZE + i;
+    count_t q = dataSize / BLOCKSIZE + (m < BLOCKSIZE && i);
+    uint8_t const* x = (uint8_t const*) data + dataSize;
+
+    memcpy( r, keys + KEYSIZE, BLOCKSIZE );      /* initialize r              */
+    for (i = 3; i < BLOCKSIZE; ++i)
+    {
+        if (i % 4 == 0)  r[i] &= 0xFC;           /* clear bottom 2 bits       */
+        if (i % 4 == 3)  r[i] &= 0x0F;           /* clear top 4 bits          */
+    }
+    r[i] = 0;
+    while (q--)
+    {
+        x -= m;
+        memcpy( c, x, m );                       /* copy message to chunk     */
+        c[m] = 1;                                /* append 1 to each chunk    */
+        mulLBlocks( r, rn );                     /* r^n = r^{n-1} * r         */
+        mulLBlocks( rn, c );                     /* calculate c_{q-n} * r^n   */
+        addLBlocks( c, sizeof c, result );       /* add to poly (mod 2^130-5) */
+        m = BLOCKSIZE;
+    }
+
+    AES_SetKey( keys );
+    rijndaelEncrypt( nonce, mac );
+    BURN( RoundKey );
+    addLBlocks( result, BLOCKSIZE, mac );        /* adding AES_k(nonce)       */
+}
+#undef Np
+#endif /* POLY1305 */
+
+
+/**--------------------------------------------------------------------------**\
+                     FPE-AES (format-preserving encryption)
+\*----------------------------------------------------------------------------*/
+#if IMPLEMENT(FPE)
+
+TODO
+
+#endif

@@ -124,7 +124,7 @@ int main()
     AES_Cipher(mainKey, 'D', a + 16, output + 48);
     check("encryption & decryption", output, test, 64);
 #endif
-#if ECB && AES_KEY_LENGTH != 32
+#if ECB && AES_KEY_LENGTH + 8 * !AES_PADDING == 24
     str2bytes(ecbcipher, test);
     AES_ECB_encrypt(key, input, st, output);
     check("ECB encryption", output, test, sizeof input);

@@ -111,7 +111,7 @@ Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
 
 /**----------------------------------------------------------------------------
 Since stdint.h is not a part of ANSI-C, we used a 'trick' that should not cause
- any problems. You may replace the following two lines by: #include <stdint.h>
+ any trouble. Yet the two lines below can be replaced by: #include <stdint.h>
  -----------------------------------------------------------------------------*/
 typedef  unsigned char  uint8_T;
 #define  uint8_t  uint8_T

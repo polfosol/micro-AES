@@ -2,13 +2,9 @@
 
 **A minimalist ANSI-C compatible code for most of the AES-related algorithms**.
 
-[![GitHub release](https://img.shields.io/static/v1?message=%C2%B5AES&logo=github&labelColor=gray&color=blue&logoColor=white&label=%20)](https://github.com/polfosol/micro-AES) ![C](https://img.shields.io/badge/langauge-C-blue.svg) [![Build Status](https://img.shields.io/badge/v1.0-blue)](https://github.com/polfosol/micro-AES/files/9945712/micro_aes-v1.0.zip) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![GitHub release](https://img.shields.io/static/v1?message=%C2%B5AES&logo=github&labelColor=gray&color=blue&logoColor=white&label=%20)](https://github.com/polfosol/micro-AES) ![C](https://img.shields.io/badge/langauge-C-blue.svg) [![Build Status](https://img.shields.io/badge/v1.0.1-blue)](https://github.com/polfosol/micro-AES/files/9952994/micro_aes-v1.0.1.zip) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-This library is a highly flexible, all-in-one implementation of different AES encryption schemes and block ciphers modes. Before you continue, please keep in mind that, most security experts strongly warn *against* implementing your own version of AES—or other ciphering algorithms; AND THEY ARE ABSOLUTELY RIGHT!
-
-Everyone who is becoming familiar with cryptography, should first sign [Jeff Moser's](https://www.moserware.com/2009/09/stick-figure-guide-to-advanced.html) so-called "Foot Shooting Prevention Agreement". I have put a copy of it at the bottom of this page.
-
-With that in mind, I shall say that the main purpose of developing µAES was purely educational. I learned a lot during writing these codes and I hope that somebody, some day, would gain a bit of knowledge from it.
+This library is a highly flexible, all-in-one implementation of different AES encryption schemes and block ciphers modes.
 
 ## Features
 
@@ -40,14 +36,24 @@ With that in mind, I shall say that the main purpose of developing µAES was pur
 
 ## Remarks
 
-For the sake of simplicity, it is often assumed that the input parameters of the functions are well defined, and the user knows what they're doing. As a result, a bunch of error checks are just skipped. Obviously, this is a naive and sometimes dangerous assumption. One must be aware that in a serious application, anything can be fed into the functions and they must take all the necessary precautions for erroneous parameters.
+* First and foremost, please keep in mind that most security experts strongly warn *against* implementing your own version of AES—or other ciphering algorithms; AND THEY ARE ABSOLUTELY RIGHT!
 
-Part of µAES is palpably influenced by [kokke's tiny-AES](https://github.com/kokke/tiny-AES-c) library, but I have made some modifications to make it smaller and more efficient. I shall give kudos to their great effort which paved the way for many other branches.
+  Everyone who is becoming familiar with cryptography, should first sign [Jeff Moser's](https://www.moserware.com/2009/09/stick-figure-guide-to-advanced.html) so-called "Foot Shooting Prevention Agreement". To save you some clicks, I have put a copy of it below.
+
+  With that in mind, I shall say that the main purpose of developing µAES was purely educational. I learned a lot during writing these codes and I hope that somebody, some day, would gain a bit of knowledge from it.
+
+* For the sake of simplicity, it is often assumed that the input parameters of the functions are well defined, and the user knows what they're doing. As a result, a bunch of error checks are just skipped. Obviously, this is a naive and sometimes dangerous assumption. One must be aware that in a serious application, anything can be fed into the functions and they must take all the necessary precautions for erroneous parameters.
+
+* Part of µAES is palpably influenced by [kokke's tiny-AES](https://github.com/kokke/tiny-AES-c) library, but I have made some modifications to make it smaller and more efficient. I shall give kudos to their great effort which paved the way for many other branches.
+
+<p align="center">
+  <img src="https://i.stack.imgur.com/SoY7x.png" alt="The foot-shooting prevention agreement taken from Jeff Moser's blog"/>
+</p>
+
+---
 
 All the contents of this repository (except the ones that I didn't write!) are subject to the terms of Apache 2.0 license.
 
 Copyright © 2022 - polfosol
 
 $In$ $sorrowful$ $memory$ $of$ [**_Mahsa  Amini_**](https://en.wikipedia.org/wiki/Death_of_Mahsa_Amini) :black_heart:
-
-![The foot-shooting prevention agreement taken from Jeff Moser's blog](https://i.stack.imgur.com/SoY7x.png)

@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : OCBtest.c
  Author      : polfosol
- Version     : 1.0.7.0
+ Version     : 1.1.0.0
  Copyright   : copyright © 2022 - polfosol
  Description : illustrating how the OpenSSL's vectors for AES-OCB mode are used
  ==============================================================================
@@ -38,20 +38,20 @@ static void bytes2str(const uint8_t* bytes, char* str, size_t len)
 }
 
 static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* a, uint8_t* c,
-                      uint8_t np, uint8_t na, uint8_t er, char* r)
+                      uint8_t np, uint8_t na, uint8_t err, char* r)
 {
     char sk[70], si[30], sp[0x100], sc[0x100], sa[0x100], msg[30];
     uint8_t tmp[0x90], t = 0;
     sprintf(msg, "%s", "success");
 
     AES_OCB_encrypt(key, iv, p, np, a, na, tmp, tmp + np);
-    if (memcmp(c, tmp, np + OCB_TAG_LEN) && er < 7)
+    if (memcmp(c, tmp, np + OCB_TAG_LEN) && !err)
     {
         sprintf(msg, "%s", "encrypt failure");
         t = 1;
     }
     memset(tmp, 0xcc , sizeof tmp);
-    t |= 2 * (AES_OCB_decrypt(key, iv, c, np, a, na, OCB_TAG_LEN, tmp) && er < 7);
+    t |= 2 * (AES_OCB_decrypt(key, iv, c, np, a, na, OCB_TAG_LEN, tmp) && !err);
     if (t > 1)
     {
         sprintf(msg, "%sdecrypt failure", t & 1 ? "encrypt & " : "");
@@ -70,9 +70,9 @@ int main()
     const char *linehdr[] =
     { "Key = ", "IV = ", "AAD = ", "Plaintext = ", "Ciphertext = ", "Tag = ", "Result = " };
     char buffer[0x800], *value = "";
-    size_t i, n = 0, pass = 0, df = 0, ef = 0, sp = 0, sa = 0, sn = 0, st = 0, first = 1;
+    size_t pass = 0, df = 0, ef = 0, sk = 0, sn = 0, sp = 0, sa = 0, st = 0;
     uint8_t key[AES_KEY_LENGTH], tmp[AES_KEY_LENGTH], iv[OCB_NONCE_LEN];
-    uint8_t p[0x80], c[0x90], a[0x80], t[16];
+    uint8_t i, p[0x80], c[0x90], a[0x80], t[16], rc = 1;
     FILE *fp, *fs, *ferr;
 
     fp = fopen(TESTFILEPATH, "r");
@@ -101,6 +101,7 @@ int main()
         switch (i)
         {
         case 0:
+            sk = strlen(value) / 2;
             str2bytes(value, tmp);
             break;
         case 1:
@@ -129,20 +130,20 @@ int main()
         }
         if (i == 0 || i > 7)
         {
-            if (!first && sn == OCB_NONCE_LEN && st == OCB_TAG_LEN)
+            if (!rc && sk == AES_KEY_LENGTH && sn == OCB_NONCE_LEN && st == OCB_TAG_LEN)
             {
-                memcpy(c + sp, t, OCB_TAG_LEN);   /* put tag at the end */
-                n = ciphertest(key, iv, p, a, c, sp, sa, i, buffer);
-                fprintf(n ? ferr : fs, "%s\n", buffer); /* save the log */
-                if (n == 0) ++pass;
+                memcpy(c + sp, t, st);   /* put tag at the end */
+                rc = ciphertest(key, iv, p, a, c, sp, sa, i, buffer);
+                fprintf(rc ? ferr : fs, "%s\n", buffer); /* save the log */
+                if (rc == 0) ++pass;
                 else
                 {
-                    if (n & 1) ++ef;
-                    if (n & 2) ++df;
+                    if (rc & 1) ++ef;
+                    if (rc & 2) ++df;
                 }
             }
             memcpy(key, tmp, sizeof key);
-            first = n = 0;
+            rc = 0;
         }
     }
     printf ("test cases: %d\nsuccessful: %d\nfailed encrypt: %d, failed decrypt: %d\n",

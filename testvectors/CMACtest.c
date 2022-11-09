@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : CMACtest.c
  Author      : polfosol
- Version     : 1.1.2.0
+ Version     : 1.5.0.0
  Copyright   : copyright © 2022 - polfosol
  Description : illustrating how the NIST's vectors for AES-CMAC are used
  ==============================================================================
@@ -39,7 +39,7 @@ static void bytes2str(const uint8_t* bytes, char* str, size_t len)
 
 static int ciphertest(uint8_t* key, uint8_t* d, uint8_t* m, size_t ds, size_t ms, char* r)
 {
-    char sk[40], smac[40], msg[30];
+    char sk[2*AES_KEY_LENGTH + 8], smac[40], msg[30];
     uint8_t tmp[32], t = 0;
     sprintf(msg, "%s", "success");
 
@@ -47,7 +47,7 @@ static int ciphertest(uint8_t* key, uint8_t* d, uint8_t* m, size_t ds, size_t ms
     t = memcmp(m, tmp, ms);
     if (t)  sprintf(msg, "%s", "failed");
 
-    bytes2str(key, sk, 16);
+    bytes2str(key, sk, AES_KEY_LENGTH);
     bytes2str(m, smac, ms);
     sprintf(r, "%s\nK: %s\nmac: %s\n", msg, sk, smac);
     return t;
@@ -57,8 +57,8 @@ int main()
 {
     const char *linehdr[] = { "Key = ", "Msg = ", "Mac = " };
     char buffer[0x20100], *value = "";
-    size_t i, n = 0, pass = 0, nf = 0, sd = 0, sm = 0;
-    uint8_t key[32], d[0x10100], m[32];
+    size_t pass = 0, nf = 0, sk = 0, sd = 0, sm = 0;
+    uint8_t i, n = 0, key[32], d[0x10100], m[32];
     FILE *fp, *fs, *ferr;
 
     fp = fopen(TESTFILEPATH, "r");
@@ -75,7 +75,7 @@ int main()
     while (fgets(buffer, sizeof buffer, fp) != NULL)
     {
         buffer[strcspn(buffer, "\n")] = 0;
-        if (strlen(buffer) < 4 || !strcspn(buffer, "=")) continue;
+        if (strlen(buffer) < 4) continue;
         for (i = 0; i < 3; i++)
         {
             if (strncmp(buffer, linehdr[i], strlen(linehdr[i])) == 0)
@@ -87,6 +87,7 @@ int main()
         switch (i)
         {
         case 0:
+            sk = strlen(value) / 2;
             str2bytes(value, key);
             break;
         case 1:
@@ -100,23 +101,19 @@ int main()
             str2bytes(value, m);
             ++n;
             break;
-        default:
-            continue;
         }
         if (n == 2)
         {
-            n = ciphertest(key, d, m, sd, sm, buffer);
-
-            fprintf(n ? ferr : fs, "%s\n", buffer); /* save the log */
-            if (n == 0) ++pass;
-            else
+            if (sk == AES_KEY_LENGTH)
             {
-                ++nf;
-                n = 0;
+                n = ciphertest(key, d, m, sd, sm, buffer);
+                fprintf(n ? ferr : fs, "%s\n", buffer); /* save the log */
+                i = n == 0 ? ++pass : ++nf;
             }
+            n = 0;
         }
     }
-    printf ("test cases: %d\nsuccessful: %d\nfailed: %d\n", pass + nf, pass, nf);
+    printf ("CMAC test cases: %d\nsuccessful: %d\nfailed: %d\n", pass + nf, pass, nf);
 
     fclose(fp); fclose(fs); fclose(ferr);
     if (nf == 0)

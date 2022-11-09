@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : GCMtest.c
  Author      : polfosol
- Version     : 1.5.1.1
+ Version     : 2.0.0.0
  Copyright   : copyright © 2022 - polfosol
  Description : illustrating how the NIST's vectors for AES-GCM mode are used
  ==============================================================================
@@ -68,9 +68,10 @@ static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* a, uint8_t
 int main()
 {
     const char *linehdr[] = { "Key = ", "IV = ", "AAD = ", "PT = ", "CT = ", "Tag = " };
-    char buffer[0x800], *value = "";
-    size_t i, n = 0, pass = 0, df = 0, ef = 0, skip = 0, sp = 0, st = 0, sa = 0;
-    uint8_t key[AES_KEY_LENGTH], iv[GCM_NONCE_LEN], p[96], c[112], a[96], t[16];
+    char buffer[0x800], *value = "", *line = "";
+    size_t pass = 0, df = 0, ef = 0, sk = 0, sn = 0, sp = 0, sa = 0, st = 0;
+    uint8_t key[AES_KEY_LENGTH], tmp[AES_KEY_LENGTH], iv[GCM_NONCE_LEN];
+    uint8_t i, p[96], c[112], a[96], t[16], rc = 1;
     FILE *fp, *fs, *ferr;
 
     fp = fopen(TESTFILEPATH, "r");
@@ -84,10 +85,11 @@ int main()
     }
     if (!fs || !ferr) return 1;
 
-    while (fgets(buffer, sizeof buffer, fp) != NULL)
+    do
     {
+        line = fgets(buffer, sizeof buffer, fp);
         buffer[strcspn(buffer, "\n")] = 0;
-        if (strlen(buffer) < 4 || !strcspn(buffer, "=")) continue;
+        if (strlen(buffer) < 4 && line != NULL) continue;
         for (i = 0; i < 6; i++)
         {
             if (strncmp(buffer, linehdr[i], strlen(linehdr[i])) == 0)
@@ -99,53 +101,47 @@ int main()
         switch (i)
         {
         case 0:
-            skip = (strlen(value) != 2 * AES_KEY_LENGTH);
-            if (!skip) str2bytes(value, key);
+            sk = strlen(value) / 2;
+            str2bytes(value, tmp);
             break;
         case 1:
-            skip |= (strlen(value) != 2 * GCM_NONCE_LEN);
-            if (!skip) str2bytes(value, iv);
+            sn = strlen(value) / 2;
+            str2bytes(value, iv);
             break;
         case 2:
             sa = strlen(value) / 2;
             str2bytes(value, a);
             break;
         case 3:
-            if (!skip) ++n;
             sp = strlen(value) / 2;
             str2bytes(value, p);
             break;
         case 4:
-            if (!skip) ++n;
             str2bytes(value, c);
             break;
         case 5:
-            if (!skip) ++n;
             st = strlen(value) / 2;
             str2bytes(value, t);
             break;
-        default:
-            continue;
         }
-        if (n == 3)
+        if (i == 0 || line == NULL)
         {
-            if (skip)
+            if (!rc && sn == GCM_NONCE_LEN && sk == AES_KEY_LENGTH)
             {
-                n = skip = 0;
-                continue;
+                memcpy(c + sp, t, st);   /* put tag at the end */
+                rc = ciphertest(key, iv, p, a, c, sp, sa, st, buffer);
+                fprintf(rc ? ferr : fs, "%s\n", buffer); /* save the log */
+                if (rc == 0) ++pass;
+                else
+                {
+                    if (rc & 1) ++ef;
+                    if (rc & 2) ++df;
+                }
             }
-            memcpy(c + sp, t, st); /* put tag at the end */
-            n = ciphertest(key, iv, p, a, c, sp, sa, st, buffer);
-            fprintf(n ? ferr : fs, "%s\n", buffer); /* save the log */
-            if (n == 0) ++pass;
-            else
-            {
-                if (n & 1) ++ef;
-                if (n & 2) ++df;
-                n = 0;
-            }
+            memcpy(key, tmp, sizeof key);
+            rc = 0;
         }
-    }
+    } while (line != NULL);
     printf ("test cases: %d\nsuccessful: %d\nfailed encrypt: %d, failed decrypt: %d\n",
         pass + ef + df, pass, ef, df);
 

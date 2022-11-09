@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.c
  Author      : polfosol
- Version     : 9.5.1.0
+ Version     : 9.5.1.2
  Copyright   : copyright © 2022 - polfosol
  Description : ANSI-C compatible implementation of µAES ™ library.
  ==============================================================================
@@ -1784,22 +1784,23 @@ static void OCB_Cipher( const uint8_t* nonce, fmix_t cipher,
                         const void* input, const size_t dataSize,
                         block_t Ls, block_t Ld, block_t Del, void* output )
 {
-    uint8_t Kt[2 * BLOCKSIZE] = { OCB_TAG_LEN << 4 & 0xFF, 0, 0, 1 };
+    uint8_t kt[2 * BLOCKSIZE] = { OCB_TAG_LEN << 4 & 0xFF };
     uint8_t r, *y = output;
     count_t i, n;
     memcpy( output, input, dataSize );           /* copy input data to output */
 
-    n = nonce[11] % 64 >> 3;
-    r = nonce[11] % 8;                           /* take last 6 bits of nonce */
-    memcpy( Kt + 4, nonce, 12 );
-    Kt[BLOCKSIZE - 1] &= 0xC0;                   /* clear last 6 bits         */
+    memcpy( kt + 16 - OCB_NONCE_LEN, nonce, OCB_NONCE_LEN );
+    kt[BLOCKSIZE - OCB_NONCE_LEN - 1] |= 1;
+    n = nonce[OCB_NONCE_LEN - 1] % 64 >> 3;
+    r = nonce[OCB_NONCE_LEN - 1] % 8;            /* take last 6 bits of nonce */
+    kt[BLOCKSIZE - 1] &= 0xC0;                   /* clear last 6 bits         */
 
-    rijndaelEncrypt( Kt, Kt );                   /* construct K_top           */
-    memcpy( Kt + BLOCKSIZE, Kt + 1, 8 );         /* stretch K_top             */
-    xorBlock( Kt, Kt + BLOCKSIZE );
+    rijndaelEncrypt( kt, kt );                   /* construct K_top           */
+    memcpy( kt + BLOCKSIZE, kt + 1, 8 );         /* stretch K_top             */
+    xorBlock( kt, kt + BLOCKSIZE );
     for (i = 0; i < BLOCKSIZE; ++n)              /* shift the stretched K_top */
     {
-        Kt[i++] = Kt[n] << r | Kt[n + 1] >> (8 - r);
+        kt[i++] = kt[n] << r | kt[n + 1] >> (8 - r);
     }
     n = dataSize / BLOCKSIZE;
     r = dataSize % BLOCKSIZE;
@@ -1809,11 +1810,11 @@ static void OCB_Cipher( const uint8_t* nonce, fmix_t cipher,
     doubleGF128B( Ld );                          /*  L_$ = double(L_*)        */
     if (n == 0)                                  /*  processed nonce is Δ_0   */
     {
-        memcpy( Del, Kt, BLOCKSIZE );            /*  initialize Δ_0           */
+        memcpy( Del, kt, BLOCKSIZE );            /*  initialize Δ_0           */
     }
     for (i = 0; i < n; y += BLOCKSIZE)
     {
-        memcpy( Del, Kt, BLOCKSIZE );            /*  calculate Δ_i using my   */
+        memcpy( Del, kt, BLOCKSIZE );            /*  calculate Δ_i using my   */
         OffsetB( Ld, ++i, Del );                 /*  .. 'magic' algorithm     */
         xorBlock( Del, y );
         cipher( y, y );                          /* Y = Δ_i ^ Cipher(Δ_i ^ X) */
@@ -1822,7 +1823,7 @@ static void OCB_Cipher( const uint8_t* nonce, fmix_t cipher,
     if (r)                                       /*  Δ_* = Δ_n ^ L_* and then */
     {                                            /*  Y_* = Enc(Δ_*) ^ X       */
         xorBlock( Ls, Del );
-        mixThenXor( Del, &rijndaelEncrypt, Kt, y, r, y );
+        mixThenXor( Del, &rijndaelEncrypt, kt, y, r, y );
         Del[r] ^= 0x80;                          /*    pad it for checksum    */
     }
 }

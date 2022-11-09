@@ -51,7 +51,7 @@ static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* a, uint8_t
         t = 1;
     }
     memset(tmp, 0xcc , sizeof tmp);
-    t |= AES_GCM_decrypt(key, iv, c, np, a, na, c + np, nt, tmp) ? 2 : 0;
+    t |= AES_GCM_decrypt(key, iv, c, np, a, na, nt, tmp) ? 2 : 0;
     if (t > 1)
     {
         sprintf(msg, "%sdecrypt failure", t & 1 ? "encrypt & " : "");

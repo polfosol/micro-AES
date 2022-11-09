@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.h
  Author      : polfosol
- Version     : 9.5.0.0
+ Version     : 9.5.1.2
  Copyright   : copyright © 2022 - polfosol
  Description : μAES ™ is a minimalist all-in-one library for AES encryption
  ==============================================================================
@@ -106,6 +106,7 @@ Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
 #endif
 
 #if OCB
+#define OCB_NONCE_LEN  12  /* RECOMMENDED. must be positive and less than 16. */
 #define OCB_TAG_LEN    16  /* again, please see the bottom of this document!  */
 #endif
 
@@ -462,8 +463,8 @@ The error codes and key length should be defined here for external references:
 > In AEAD modes, the size of nonce and tag might be a parameter of the algorithm
     such that changing them affect the results. The GCM/EAX modes support
     arbitrary sizes for nonce. In CCM, the nonce length may vary from 8 to 13
-    bytes. Also the tag size is an EVEN number between 4..16. In OCB, only the
-    tag size is a parameter between 0..16 bytes. Note that the 'calculated' tag
+    bytes. Also the tag size is an EVEN number between 4..16. In OCB, the nonce
+    size is 1..15 and the tag is 0..16 bytes. Note that the 'calculated' tag-
     size is always 16 bytes which can later be truncated to desired values. So
     in encryption functions, the provided authTag buffer must be 16 bytes long.
 

@@ -1,17 +1,17 @@
 /*
  ==============================================================================
- Name        : CCMtest.c
+ Name        : OCBtest.c
  Author      : polfosol
- Version     : 1.6.0.0
+ Version     : 1.0.7.0
  Copyright   : copyright © 2022 - polfosol
- Description : illustrating how the NIST's vectors for AES-CCM mode are used
+ Description : illustrating how the OpenSSL's vectors for AES-OCB mode are used
  ==============================================================================
  */
 
 #include <stdio.h>
 #include "../micro_aes.h"
 
-#define TESTFILEPATH "CCM_VNT128.rsp"
+#define TESTFILEPATH "OCB_AES128.tv"
 
 static void str2bytes(const char* str, uint8_t* bytes)
 #define char2num(c)  (c > '9' ? (c & 7) + 9 : c & 0xF)
@@ -37,39 +37,42 @@ static void bytes2str(const uint8_t* bytes, char* str, size_t len)
     str[j] = 0;
 }
 
-static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* a, uint8_t* c, uint8_t np, uint8_t na, char* r)
+static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* a, uint8_t* c,
+                      uint8_t np, uint8_t na, uint8_t er, char* r)
 {
-    char sk[70], si[40], sp[80], sc[96], sa[80], msg[30];
-    uint8_t tmp[64], t = 0;
+    char sk[70], si[30], sp[0x100], sc[0x100], sa[0x100], msg[30];
+    uint8_t tmp[0x90], t = 0;
     sprintf(msg, "%s", "success");
 
-    AES_CCM_encrypt(key, iv, p, np, a, na, tmp, tmp + np);
-    if (memcmp(c, tmp, np + CCM_TAG_LEN))
+    AES_OCB_encrypt(key, iv, p, np, a, na, tmp, tmp + np);
+    if (memcmp(c, tmp, np + OCB_TAG_LEN) && er < 7)
     {
         sprintf(msg, "%s", "encrypt failure");
         t = 1;
     }
     memset(tmp, 0xcc , sizeof tmp);
-    t |= AES_CCM_decrypt(key, iv, c, np, a, na, CCM_TAG_LEN, tmp) ? 2 : 0;
+    t |= 2 * (AES_OCB_decrypt(key, iv, c, np, a, na, OCB_TAG_LEN, tmp) && er < 7);
     if (t > 1)
     {
         sprintf(msg, "%sdecrypt failure", t & 1 ? "encrypt & " : "");
     }
     bytes2str(key, sk, AES_KEY_LENGTH);
-    bytes2str(iv, si, CCM_NONCE_LEN);
+    bytes2str(iv, si, OCB_NONCE_LEN);
     bytes2str(p, sp, np);
     bytes2str(a, sa, na);
-    bytes2str(c, sc, np + CCM_TAG_LEN);
+    bytes2str(c, sc, np + OCB_TAG_LEN);
     sprintf(r, "%s\nK: %s\ni: %s\nP: %s\nA: %s\nC: %s", msg, sk, si, sp, sa, sc);
     return t;
 }
 
 int main()
 {
-    const char *linehdr[] = { "Key = ", "Nonce = ", "Adata = ", "Payload = ", "CT = " };
+    const char *linehdr[] =
+    { "Key = ", "IV = ", "AAD = ", "Plaintext = ", "Ciphertext = ", "Tag = ", "Result = " };
     char buffer[0x800], *value = "";
-    size_t i, n = 0, pass = 0, df = 0, ef = 0, skip = 0, sp = 0, sc = 0, sa = 0;
-    uint8_t key[AES_KEY_LENGTH], iv[16], p[64], c[80], a[64];
+    size_t i, n = 0, pass = 0, df = 0, ef = 0, sp = 0, sa = 0, sn = 0, st = 0, first = 1;
+    uint8_t key[AES_KEY_LENGTH], tmp[AES_KEY_LENGTH], iv[OCB_NONCE_LEN];
+    uint8_t p[0x80], c[0x90], a[0x80], t[16];
     FILE *fp, *fs, *ferr;
 
     fp = fopen(TESTFILEPATH, "r");
@@ -86,8 +89,8 @@ int main()
     while (fgets(buffer, sizeof buffer, fp) != NULL)
     {
         buffer[strcspn(buffer, "\n")] = 0;
-        if (strlen(buffer) < 4 || !strcspn(buffer, "=")) continue;
-        for (i = 0; i < 5; i++)
+        if (strlen(buffer) < 4) continue;
+        for (i = 0; i < 7; i++)
         {
             if (strncmp(buffer, linehdr[i], strlen(linehdr[i])) == 0)
             {
@@ -98,11 +101,10 @@ int main()
         switch (i)
         {
         case 0:
-            skip = (strlen(value) != 2 * AES_KEY_LENGTH);
-            str2bytes(value, key);
+            str2bytes(value, tmp);
             break;
         case 1:
-            skip |= (strlen(value) != 2 * CCM_NONCE_LEN);
+            sn = strlen(value) / 2;
             str2bytes(value, iv);
             break;
         case 2:
@@ -110,35 +112,37 @@ int main()
             str2bytes(value, a);
             break;
         case 3:
-            if (!skip) ++n;
             sp = strlen(value) / 2;
             str2bytes(value, p);
             break;
         case 4:
-            if (!skip) ++n;
-            sc = strlen(value) / 2;
             str2bytes(value, c);
             break;
-        default:
-            continue;
+        case 5:
+            st = strlen(value) / 2;
+            str2bytes(value, t);
+            break;
+        case 6:
+            i = strstr(value, "ERROR") - value;
+            i = 7 + (i > 0 && i < 0x100);
+            break;
         }
-        if (n == 2)
+        if (i == 0 || i > 7)
         {
-            skip |= (CCM_TAG_LEN + sp != sc);
-            if (skip)
+            if (!first && sn == OCB_NONCE_LEN && st == OCB_TAG_LEN)
             {
-                n = skip = 0;
-                continue;
+                memcpy(c + sp, t, OCB_TAG_LEN);   /* put tag at the end */
+                n = ciphertest(key, iv, p, a, c, sp, sa, i, buffer);
+                fprintf(n ? ferr : fs, "%s\n", buffer); /* save the log */
+                if (n == 0) ++pass;
+                else
+                {
+                    if (n & 1) ++ef;
+                    if (n & 2) ++df;
+                }
             }
-            n = ciphertest(key, iv, p, a, c, sp, sa, buffer);
-            fprintf(n ? ferr : fs, "%s\n", buffer); /* save the log */
-            if (n == 0) ++pass;
-            else
-            {
-                if (n & 1) ++ef;
-                if (n & 2) ++df;
-                n = 0;
-            }
+            memcpy(key, tmp, sizeof key);
+            first = n = 0;
         }
     }
     printf ("test cases: %d\nsuccessful: %d\nfailed encrypt: %d, failed decrypt: %d\n",

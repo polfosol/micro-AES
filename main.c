@@ -128,14 +128,14 @@ int main()
     str2bytes(ecbcipher, test);
     AES_ECB_encrypt(key, input, st, output);
     check("ECB encryption", output, test, sizeof input);
-    *output ^= AES_ECB_decrypt(key, test, sizeof input, output);
+    AES_ECB_decrypt(key, test, sizeof input, output);
     check("ECB decryption", output, input, st);
 #endif
 #if CBC && AES_KEY_LENGTH == 16
     str2bytes(cbccipher, test);
-    *output ^= AES_CBC_encrypt(key, iv, input, st, output);
+    AES_CBC_encrypt(key, iv, input, st, output);
     check("CBC encryption", output, test, CTS ? st : sizeof input);
-    *output ^= AES_CBC_decrypt(key, iv, test, CTS ? st : sizeof input, output);
+    AES_CBC_decrypt(key, iv, test, CTS ? st : sizeof input, output);
     check("CBC decryption", output, input, st);
 #endif
 #if CFB && AES_KEY_LENGTH == 16
@@ -161,9 +161,9 @@ int main()
 #endif
 #if XTS && AES_KEY_LENGTH != 24
     str2bytes(xtscipher, test);
-    *output ^= AES_XTS_encrypt(key, iv, input, st, output);
+    AES_XTS_encrypt(key, iv, input, st, output);
     check("XTS encryption", output, test, st);
-    *output ^= AES_XTS_decrypt(key, iv, test, st, output);
+    AES_XTS_decrypt(key, iv, test, st, output);
     check("XTS decryption", output, input, st);
 #endif
 #if CMAC && AES_KEY_LENGTH == 16
@@ -228,7 +228,7 @@ int main()
     str2bytes(wrapped, test);
     AES_KEY_wrap(mainKey, key + 32, AES_KEY_LENGTH, output);
     check("key wrapping  ", output, test, AES_KEY_LENGTH + 8);
-    *output ^= AES_KEY_unwrap(mainKey, test, AES_KEY_LENGTH + 8, output);
+    AES_KEY_unwrap(mainKey, test, AES_KEY_LENGTH + 8, output);
     check("key unwrapping", output, key + 32, AES_KEY_LENGTH);
 #endif
 

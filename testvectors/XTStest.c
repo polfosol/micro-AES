@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : XTStest.c
  Author      : polfosol
- Version     : 2.1.0.0
+ Version     : 2.3.0.0
  Copyright   : copyright © 2022 - polfosol
  Description : illustrating how the NIST's vectors for AES-XTS mode are used
  ==============================================================================
@@ -39,25 +39,24 @@ static void bytes2str(const uint8_t* bytes, char* str, size_t len)
 
 static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* c, uint8_t n, char* r)
 {
-    int false_negative = (n == 17 && (p[16] & 0x1F) == 0 && (c[16] & 0x1F) == 0);
-    char sk[80], si[40], sp[80], sc[80], msg[30];
-    uint8_t tmp[32], t = 0;
+    char sk[4*AES_KEY_LENGTH + 16], si[40], sp[0x80], sc[0x80], msg[30];
+    uint8_t tmp[0x80], t = 0;
     sprintf(msg, "%s", "success");
 
     AES_XTS_encrypt(key, iv, p, n, tmp);
-    if (memcmp(c, tmp, n) && !false_negative)
+    if (memcmp(c, tmp, n))
     {
         sprintf(msg, "%s", "encrypt failure");
         t = 1;
     }
     memset(tmp, 0xcc , sizeof tmp);
     AES_XTS_decrypt(key, iv, c, n, tmp);
-    if (memcmp(p, tmp, n) && !false_negative)
+    if (memcmp(p, tmp, n))
     {
         sprintf(msg, "%sdecrypt failure", t ? "encrypt & " : "");
         t |= 2;
     }
-    bytes2str(key, sk, 32);
+    bytes2str(key, sk, 2*AES_KEY_LENGTH);
     bytes2str(iv, si, 16);
     bytes2str(p, sp, n);
     bytes2str(c, sc, n);
@@ -67,10 +66,10 @@ static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* c, uint8_t
 
 int main()
 {
-    const char *linehdr[] = { "Key = ", "i = ", "PT = ", "CT = " };
+    const char *linehdr[] = { "Key = ", "i = ", "PT = ", "CT = ", "DataUnitLen = " };
     char buffer[0x800], *value = "";
-    size_t i, n = 0, pass = 0, df = 0, ef = 0, s = 0;
-    uint8_t key[32], iv[16], p[32], c[32];
+    size_t i, n = 0, pass = 0, df = 0, ef = 0, s = 0, sk = 0;
+    uint8_t key[2*AES_KEY_LENGTH], iv[16], p[0x80], c[0x80], ul[2];
     FILE *fp, *fs, *ferr;
 
     fp = fopen(TESTFILEPATH, "r");
@@ -87,8 +86,8 @@ int main()
     while (fgets(buffer, sizeof buffer, fp) != NULL)
     {
         buffer[strcspn(buffer, "\n")] = 0;
-        if (strlen(buffer) < 4 || !strcspn(buffer, "=")) continue;
-        for (i = 0; i < 4; i++)
+        if (strlen(buffer) < 4) continue;
+        for (i = 0; i < 5; i++)
         {
             if (strncmp(buffer, linehdr[i], strlen(linehdr[i])) == 0)
             {
@@ -99,13 +98,13 @@ int main()
         switch (i)
         {
         case 0:
-            str2bytes(value, key);
+            sk = strlen(value) / 2;
+            if (sk == 2 * AES_KEY_LENGTH) str2bytes(value, key);
             break;
         case 1:
             str2bytes(value, iv);
             break;
         case 2:
-            s = strlen(value) / 2;
             str2bytes(value, p);
             ++n;
             break;
@@ -113,21 +112,22 @@ int main()
             str2bytes(value, c);
             ++n;
             break;
-        default:
-            continue;
+        case 4:
+            str2bytes(value, ul);
+            break;
         }
         if (n == 2)
         {
-            n = ciphertest(key, iv, p, c, s, buffer);
-
-            fprintf(n ? ferr : fs, "%s\n", buffer); /* save the log */
-            if (n == 0) ++pass;
-            else
+            s = (ul[0] >> 4) *100 + (ul[0] & 15) *10 + (ul[1] >> 4);
+            if (sk == 2 * AES_KEY_LENGTH && s % 8 == 0)
             {
+                n = ciphertest(key, iv, p, c, s / 8, buffer);
+                fprintf(n ? ferr : fs, "%s\n", buffer); /* save the log */
+                if (n == 0) ++pass;
                 if (n & 1) ++ef;
                 if (n & 2) ++df;
-                n = 0;
             }
+            n = 0;
         }
     }
     printf ("test cases: %d\nsuccessful: %d\nfailed encrypt: %d, failed decrypt: %d\n",

@@ -87,9 +87,11 @@ int main()
 
     do
     {
-        line = fgets(buffer, sizeof buffer, fp);
-        buffer[strcspn(buffer, "\n")] = 0;
-        if (strlen(buffer) < 4 && line != NULL) continue;
+        if ((line = fgets(buffer, sizeof buffer, fp)) != NULL)
+        {
+            buffer[strcspn(buffer, "\n")] = 0;
+            if (strlen(buffer) < 4) continue;
+        }
         for (i = 0; i < 6; i++)
         {
             if (strncmp(buffer, linehdr[i], strlen(linehdr[i])) == 0)
@@ -102,11 +104,11 @@ int main()
         {
         case 0:
             sk = strlen(value) / 2;
-            str2bytes(value, tmp);
+            if (sk == AES_KEY_LENGTH) str2bytes(value, tmp);
             break;
         case 1:
             sn = strlen(value) / 2;
-            str2bytes(value, iv);
+            if (sn == GCM_NONCE_LEN) str2bytes(value, iv);
             break;
         case 2:
             sa = strlen(value) / 2;

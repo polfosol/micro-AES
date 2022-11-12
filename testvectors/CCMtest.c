@@ -68,8 +68,8 @@ int main()
 {
     const char *linehdr[] = { "Key = ", "Nonce = ", "Adata = ", "Payload = ", "CT = " };
     char buffer[0x800], *value = "";
-    size_t i, n = 0, pass = 0, df = 0, ef = 0, skip = 0, sp = 0, sc = 0, sa = 0;
-    uint8_t key[AES_KEY_LENGTH], iv[16], p[64], c[80], a[64];
+    size_t pass = 0, df = 0, ef = 0, sk = 0, sn = 0, sp = 0, sc = 0, sa = 0;
+    uint8_t i, n = 0, key[AES_KEY_LENGTH], iv[16], p[64], c[80], a[64];
     FILE *fp, *fs, *ferr;
 
     fp = fopen(TESTFILEPATH, "r");
@@ -86,7 +86,7 @@ int main()
     while (fgets(buffer, sizeof buffer, fp) != NULL)
     {
         buffer[strcspn(buffer, "\n")] = 0;
-        if (strlen(buffer) < 4 || !strcspn(buffer, "=")) continue;
+        if (strlen(buffer) < 4) continue;
         for (i = 0; i < 5; i++)
         {
             if (strncmp(buffer, linehdr[i], strlen(linehdr[i])) == 0)
@@ -98,47 +98,42 @@ int main()
         switch (i)
         {
         case 0:
-            skip = (strlen(value) != 2 * AES_KEY_LENGTH);
-            str2bytes(value, key);
+            sk = strlen(value) / 2;
+            if (sk == AES_KEY_LENGTH) str2bytes(value, key);
             break;
         case 1:
-            skip |= (strlen(value) != 2 * CCM_NONCE_LEN);
-            str2bytes(value, iv);
+            sn = strlen(value) / 2;
+            if (sn == CCM_NONCE_LEN) str2bytes(value, iv);
             break;
         case 2:
             sa = strlen(value) / 2;
             str2bytes(value, a);
             break;
         case 3:
-            if (!skip) ++n;
             sp = strlen(value) / 2;
             str2bytes(value, p);
+            ++n;
             break;
         case 4:
-            if (!skip) ++n;
-            sc = strlen(value) / 2;
+            sc = strlen(value) / 2 - CCM_TAG_LEN;
             str2bytes(value, c);
+            ++n;
             break;
-        default:
-            continue;
         }
         if (n == 2)
         {
-            skip |= (CCM_TAG_LEN + sp != sc);
-            if (skip)
+            if (sk == AES_KEY_LENGTH && sn == CCM_NONCE_LEN && sp == sc)
             {
-                n = skip = 0;
-                continue;
+                n = ciphertest(key, iv, p, a, c, sp, sa, buffer);
+                fprintf(n ? ferr : fs, "%s\n", buffer); /* save the log */
+                if (n == 0) ++pass;
+                else
+                {
+                    if (n & 1) ++ef;
+                    if (n & 2) ++df;
+                }
             }
-            n = ciphertest(key, iv, p, a, c, sp, sa, buffer);
-            fprintf(n ? ferr : fs, "%s\n", buffer); /* save the log */
-            if (n == 0) ++pass;
-            else
-            {
-                if (n & 1) ++ef;
-                if (n & 2) ++df;
-                n = 0;
-            }
+            n = 0;
         }
     }
     printf ("test cases: %d\nsuccessful: %d\nfailed encrypt: %d, failed decrypt: %d\n",

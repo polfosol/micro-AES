@@ -102,11 +102,11 @@ int main()
         {
         case 0:
             sk = strlen(value) / 2;
-            str2bytes(value, tmp);
+            if (sk == AES_KEY_LENGTH) str2bytes(value, tmp);
             break;
         case 1:
             sn = strlen(value) / 2;
-            str2bytes(value, iv);
+            if (sn == OCB_NONCE_LEN) str2bytes(value, iv);
             break;
         case 2:
             sa = strlen(value) / 2;

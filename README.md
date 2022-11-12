@@ -4,27 +4,27 @@
 
 [![GitHub release](https://img.shields.io/static/v1?message=%C2%B5AES&logo=github&labelColor=gray&color=blue&logoColor=white&label=%20)](https://github.com/polfosol/micro-AES) ![C](https://img.shields.io/badge/langauge-C-blue.svg) [![Build Status](https://img.shields.io/badge/v1.0.1-blue)](https://github.com/polfosol/micro-AES/files/9952994/micro_aes-v1.0.1.zip) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-This library is a highly flexible, all-in-one implementation of different AES encryption schemes and block ciphers modes.
+This library is a highly flexible and portable implementation of different AES encryption schemes and block cipher modes.
 
 ## Features
 
-* $\textrm{\textbf{Comprehensive}}$ — supports any form of the AES with all possible combinations of standard key sizes and block-cipher modes. e.g. AES-128-CBC or AES-192-GCM or AES-256-XTS are within reach simply by setting a couple of macros.
+* $\textrm{\textbf{Comprehensive}}$ — supports all standard AES key sizes (128, 192 and 256 bits) along with almost every block-cipher mode.
 
-* $\textrm{\textbf{All in one}}$ — all popular (and some unpopular) block ciphering modes of the AES are implemented into a single file; such as [**_ECB_**, **_CBC_**, **_CFB_**, **_OFB_**, **_CTR_**](https://csrc.nist.gov/publications/detail/sp/800-38a/final), [**_GCM_**](https://csrc.nist.gov/publications/detail/sp/800-38d/final), [**_CCM_**](https://csrc.nist.gov/publications/detail/sp/800-38c/final), [**_XTS_**](https://csrc.nist.gov/publications/detail/sp/800-38e/final), [**_OCB_**](https://www.rfc-editor.org/rfc/rfc7253.html), [**_EAX_**](https://en.wikipedia.org/wiki/EAX_mode), [**_KW_** (**_KWA_**)](https://csrc.nist.gov/publications/detail/sp/800-38f/final), [**_SIV_**](https://www.rfc-editor.org/rfc/rfc5297.html), [**_GCM-SIV_**](https://www.rfc-editor.org/rfc/rfc8452.html), [FPE](), and furthermore, authentication APIs for [**_CMAC_**](https://csrc.nist.gov/publications/detail/sp/800-38b/final) and [**_Poly1305-AES_**](https://cr.yp.to/mac.html).
+  All popular (and some unpopular) block ciphering modes of the AES are implemented in this library, such as [**_ECB_**, **_CBC_**, **_CFB_**, **_OFB_**, **_CTR_**](https://csrc.nist.gov/publications/detail/sp/800-38a/final), [**_GCM_**](https://csrc.nist.gov/publications/detail/sp/800-38d/final), [**_CCM_**](https://csrc.nist.gov/publications/detail/sp/800-38c/final), [**_XTS_**](https://csrc.nist.gov/publications/detail/sp/800-38e/final), [**_OCB_**](https://www.rfc-editor.org/rfc/rfc7253.html), [**_EAX_**](https://en.wikipedia.org/wiki/EAX_mode), [**_KW_** (**_KWA_**)](https://csrc.nist.gov/publications/detail/sp/800-38f/final), [**_SIV_**](https://www.rfc-editor.org/rfc/rfc5297.html), [**_GCM-SIV_**](https://www.rfc-editor.org/rfc/rfc8452.html), [**_FPE_**](https://csrc.nist.gov/publications/detail/sp/800-38g/final), and furthermore, authentication APIs for [**_CMAC_**](https://csrc.nist.gov/publications/detail/sp/800-38b/final) and [**_Poly1305-AES_**](https://cr.yp.to/mac.html).
 
-* $\textrm{\textbf{Clear and readable code}}$ — hopefully, the code is written in a layman-friendly way. Lots of comments are added along the way to make its purpose more understandable. Also the code styling is a bit different, and IMHO more eye-catching, than what you might see in other implementations.
+* $\textrm{\textbf{All in one}}$ — the whole implementation code is in a single C file with no external dependencies.
+
+* $\textrm{\textbf{Clear and readable code}}$ — hopefully, the code is written in a layman-friendly way with lots of comments to clarify its purpose. Also the code styling is a bit different, and IMHO more eye-catching, than what you might see in other implementations.
 
 * $\textrm{\textbf{Flexible}}$ — many features of µAES are controllable by macros, so that you can just pick up what you need and disable the unnecessary parts. These macros are defined in the header file `micro_aes.h` and comments are added for each of them to explain what they represent. *Please read those comments carefully before using the code*.
 
-* $\textrm{\textbf{Lightweight}}$ — the API has very little memory footprint and compiled code size. In my own tests and benchmarks, the amount of RAM used by the functions didn't exceed a few hundred bytes in most extreme cases. I might update this repo later with some of those benchmarks, and you are also cheerfully welcome to run yours.
+* $\textrm{\textbf{Lightweight}}$ — the API has very little memory footprint and compiled code size. In my own tests, the amount of RAM used by the functions didn't exceed a few hundred bytes in most extreme cases. Moreover, the ROM space of µAES is optimized as much as possible. For example if you disable all other macros and just stick with the GCM, the compiled code size will be around **3KB** with `gcc -Os` on x86 machine for either AES-128-GCM or AES-256-GCM.
 
-  Moreover, the ROM space of µAES is optimized as much as possible. For example, if you disable all other macros and just stick with the GCM, the compiled code size will be around **3KB** with `gcc -Os` on x86 machine for either AES-128-GCM or AES-256-GCM.
-
-* $\textrm{\textbf{Fast}}$ — the encryption or decryption speed is fairly high, especially when there is no authentication. Some authentication functions may not look so efficient speed-wise, as they require large integer multiplications. But it's worth noting that faster methods are hardly portable or easy to understand. Furthermore, since code simplicity and portability was a main concern, paralellization or advanced CPU optimizations are not a feature of µAES —which will affect its overall speed.
+* $\textrm{\textbf{Fast}}$ — the encryption or decryption speed is fairly high, especially when there is no authentication. Since code simplicity and minimizing memory usage was a top priority, some functions may not look so efficient speed-wise. But it is worth noting that faster methods are hardly portable or easy to understand. So it's not a surprise that paralellization or advanced CPU optimizations are not a feature of µAES —which will affect its overall speed.
 
   As a side note, speed is not always a blessing in cryptography and sometimes slower codes turn out to be more secure. One must be wary of those speedups that make the code more susceptible to [timing attacks](https://en.wikipedia.org/wiki/Timing_attack).
 
-* $\textrm{\textbf{Portable}}$ — µAES is all-in-one with no dependencies on any other library. It is fully compliant with the ANSI-C or C89 standard which, combined with its small size, makes it a competent candidate for embedded systems and mini applications.
+* $\textrm{\textbf{Portable}}$ — µAES is fully compliant with the ANSI-C or C89 standard which, combined with its small size and independence from external libraries, makes it a competent candidate for embedded systems and mini applications.
 
   You can even compile it with [Tiny C Compiler](https://bellard.org/tcc/):
 
@@ -33,6 +33,8 @@ This library is a highly flexible, all-in-one implementation of different AES en
   tcc -c micro_aes.c -o micro_aes.o
   tcc -o micro_aes.exe  main.o micro_aes.o
   ```
+## Examples
+See the `main.c` file which contains test vectors and example codes illustrating how to use the API functions.
 
 ## Remarks
 

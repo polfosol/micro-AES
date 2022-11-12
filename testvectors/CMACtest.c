@@ -88,12 +88,12 @@ int main()
         {
         case 0:
             sk = strlen(value) / 2;
-            str2bytes(value, key);
+            if (sk == AES_KEY_LENGTH) str2bytes(value, key);
             break;
         case 1:
             sd = strlen(value) / 2;
             str2bytes(value, d);
-            if (sd == 1 && d[0] == 0) --sd;
+            sd -= (sd == 1 && d[0] == 0);
             ++n;
             break;
         case 2:

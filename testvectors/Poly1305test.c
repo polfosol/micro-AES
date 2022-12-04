@@ -102,8 +102,6 @@ int main()
             str2bytes(value, m);
             ++n;
             break;
-        default:
-            continue;
         }
         if (n == 2)
         {

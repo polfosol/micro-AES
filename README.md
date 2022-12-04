@@ -2,7 +2,7 @@
 
 **A minimalist ANSI-C compatible code for most of the AES-related algorithms**.
 
-[![GitHub release](https://img.shields.io/static/v1?message=%C2%B5AES&logo=github&labelColor=gray&color=blue&logoColor=white&label=%20)](https://github.com/polfosol/micro-AES) ![C](https://img.shields.io/badge/langauge-C-blue.svg) [![Build Status](https://img.shields.io/badge/v1.0.1-blue)](https://github.com/polfosol/micro-AES/files/9952994/micro_aes-v1.0.1.zip) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![GitHub release](https://img.shields.io/static/v1?message=%C2%B5AES&logo=github&labelColor=gray&color=blue&logoColor=white&label=%20)](https://github.com/polfosol/micro-AES) ![C](https://img.shields.io/badge/langauge-C-blue.svg) [![Build Status](https://img.shields.io/badge/v1.2.0-blue)](https://github.com/polfosol/micro-AES/files/10149095/micro_aes-v1.2.0.zip) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 This library is a highly flexible and portable implementation of different AES encryption schemes and block cipher modes.
 
@@ -20,7 +20,7 @@ This library is a highly flexible and portable implementation of different AES e
 
 * $\textrm{\textbf{Lightweight}}$ — the API has very little memory footprint and compiled code size. In my own tests, the amount of RAM used by the functions didn't exceed a few hundred bytes in most extreme cases. Moreover, the ROM space of µAES is optimized as much as possible. For example if you disable all other macros and just stick with the GCM, the compiled code size will be around **3KB** with `gcc -Os` on x86 machine for either AES-128-GCM or AES-256-GCM.
 
-* $\textrm{\textbf{Fast}}$ — the encryption or decryption speed is fairly high, especially when there is no authentication. Since code simplicity and minimizing memory usage was a top priority, some functions may not look so efficient speed-wise. But it is worth noting that faster methods are hardly portable or easy to understand. So it's not a surprise that paralellization or advanced CPU optimizations are not a feature of µAES —which will affect its overall speed.
+* $\textrm{\textbf{Fast}}$ — the encryption or decryption speed is fairly high, especially when there is no authentication. Since code simplicity and minimizing memory usage was a top priority, some functions may not look so efficient speed-wise. But it is worth noting that faster methods are hardly portable or easy to understand. So it's no surprise that paralellization or advanced CPU optimizations are not a feature of µAES —which will affect its overall speed.
 
   As a side note, speed is not always a blessing in cryptography and sometimes slower codes turn out to be more secure. One must be wary of those speedups that make the code more susceptible to [timing attacks](https://en.wikipedia.org/wiki/Timing_attack).
 
@@ -34,13 +34,13 @@ This library is a highly flexible and portable implementation of different AES e
   tcc -o micro_aes.exe  main.o micro_aes.o
   ```
 ## Examples
-See the `main.c` file which contains test vectors and example codes illustrating how to use the API functions.
+See the `main.c` file which has some example codes illustrating how to use the API functions, along with test vectors.
 
 ## Remarks
 
-* First and foremost, please keep in mind that most security experts strongly warn *against* implementing your own version of AES—or other ciphering algorithms; AND THEY ARE ABSOLUTELY RIGHT!
+* First, please keep in mind that most security experts strongly warn *against* implementing your own version of AES—or other ciphering algorithms; AND THEY ARE ABSOLUTELY RIGHT!
 
-  Everyone who is becoming familiar with cryptography, should first sign [Jeff Moser's](https://www.moserware.com/2009/09/stick-figure-guide-to-advanced.html) so-called "Foot Shooting Prevention Agreement". To save you some clicks, I have put a copy of it below.
+  Everyone who is becoming familiar with cryptography, should first sign [Jeff Moser's](https://www.moserware.com/2009/09/stick-figure-guide-to-advanced.html) so-called "Foot Shooting Prevention Agreement". To save you a click and scroll, I have put a copy of it below (but it is recommended to follow the link and read that article if you haven't).
 
   With that in mind, I shall say that the main purpose of developing µAES was purely educational. I learned a lot during writing these codes and I hope that somebody, some day, would gain a bit of knowledge from it.
 

@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.c
  Author      : polfosol
- Version     : 9.8.1.0
+ Version     : 9.9.0.0
  Copyright   : copyright © 2022 - polfosol
  Description : ANSI-C compatible implementation of µAES ™ library.
  ==============================================================================
@@ -433,7 +433,7 @@ static void putValueL( block_t block, uint8_t pos, size_t val )
 
 #if KWA
 
-/** xor a big endian value with a half-block.                                 */
+/** xor a block with a big-endian value, whose LSB is at the specified pos... */
 static void xorWith( uint8_t* block, uint8_t pos, size_t val )
 {
     do
@@ -2056,9 +2056,9 @@ void AES_Poly1305( const uint8_t* keys, const block_t nonce,
 #else
 #define ALPHABET "0123456789"
 #define string_t char*                           /*  string pointer type      */
-#define RADIX    10                              /*  strlen( ALPHABET )       */
-#define LOGRDX   3.321928095                     /*  log2( RADIX )            */
-#define MINLEN   6                               /*  ceil(6 / log10( RADIX )) */
+#define RADIX    10                              /*  strlen (ALPHABET)        */
+#define LOGRDX   3.321928095                     /*  log2 (RADIX)             */
+#define MINLEN   6                               /*  ceil (6 / log10 (RADIX)) */
 #endif
 
 #if RADIX <= 0xFF
@@ -2067,42 +2067,132 @@ typedef uint8_t  rbase_t;                        /*  num type in base-radix   */
 typedef unsigned short  rbase_t;
 #endif
 
-/** append a digit d in base-RADIX to a big-endian number, denoted by num     */
-static void addRxdigit( uint8_t* num, size_t N, size_t d )
+#if FF_X == 3
+
+/** convert a string in base-RADIX to a little-endian number, denoted by num  */
+static void numRadix( const rbase_t* s, uint8_t len, uint8_t* num, uint8_t bytes )
 {
-    while (N--)
+    size_t i, d;
+    memset( num, 0, bytes );
+    while (len--)
     {
-        d += num[N] * RADIX;
-        num[N] = (uint8_t) d;                    /*  num = num * RADIX + d    */
-        d >>= 8;
+        for (d = s[len], i = 0; i < bytes; d >>= 8)
+        {
+            d += num[i] * RADIX;                 /*  num = num * RADIX + d    */
+            num[i++] = (uint8_t) d;
+        }
     }
 }
+
+/** convert a little-endian number to its base-RADIX representation string: s */
+static void strRadix( const uint8_t* num, uint8_t bytes, rbase_t* s, uint8_t len )
+{
+    size_t i, b;
+    memset( s, 0, sizeof (rbase_t) * len );
+    while (bytes--)
+    {
+        for (b = num[bytes], i = 0; i < len; b /= RADIX)
+        {
+            b += s[i] << 8;                      /*  num = num << 8 + b       */
+            s[i++] = b % RADIX;
+        }
+    }
+}
+
+/** add two numbers in base-RADIX represented by q and p, so that p = p + q   */
+static void numstrAdd( const rbase_t* q, const uint8_t N, rbase_t* p )
+{
+    size_t a, c = 0, i;
+    for (i = 0; i < N; c = a >= RADIX)
+    {
+        a = p[i] + q[i] + c;
+        p[i++] = (rbase_t) (a % RADIX);
+    }
+}
+
+/** subtract two numbers in base-RADIX represented by q and p, so that p -= q */
+static void numstrSub( const rbase_t* q, const uint8_t N, rbase_t* p )
+{
+    size_t s, c = 0, i;
+    for (i = 0; i < N; c = s < RADIX)
+    {
+        s = RADIX + p[i] - q[i] - c;
+        p[i++] = (rbase_t) (s % RADIX);
+    }
+}
+
+/** apply the FF3-1 round at step i to the input string X with length `len`   */
+static void FF3round( const uint8_t i, const uint8_t* T, const uint8_t u,
+                      const uint8_t len, rbase_t* Xe )
+{
+    uint8_t P[BLOCKSIZE], t = len - (~i & 1) * u;
+
+    T += (~i & 1) * 4;                           /* W=TL if i is odd, else TR */
+    P[15] = T[0];  P[14] = T[1];
+    P[13] = T[2];  P[12] = T[3] ^ i;
+
+    numRadix( Xe - t, len - u, P, 12 );
+    rijndaelEncrypt( P, P );
+    strRadix( P, sizeof P, Xe, u );              /* C = REV( STRm(c) )        */
+}
+
+/** encrypt/decrypt a base-RADIX string X with size len using FF3-1 algorithm */
+static void FF3_Cipher( const char mode, const uint8_t* key,
+                        const uint8_t len, const uint8_t* tweak, rbase_t* X )
+{
+    uint8_t u = (len + mode) >> 1, r = mode ? 0 : 8, i, *k;
+    uint8_t T[8];
+
+    memcpy( T, tweak, 7 );
+    T[7] = T[3] << 4 & 0xF0;
+    T[3] &= 0xF0;
+    T[7] = 0x73; T[3] = 10;
+    X += len;                                    /* go to end of the input    */
+
+    for (i = KEYSIZE, k = (void*) X; i; )  k[--i] = *key++;
+    AES_SetKey( k );                             /*       reversed key        */
+
+    for (i = r; i < 8; ++i, u = len - u)
+    {
+        FF3round( i, T, u, len, X );             /* encryption rounds         */
+        numstrAdd( X, u, X - (i & 1 ? u : len) );
+    }
+    for (i = r; i--; u = len - u)
+    {
+        FF3round( i, T, u, len, X );             /* decryption rounds         */
+        numstrSub( X, u, X - (i & 1 ? u : len) );
+    }
+}
+#else /* FF1: */
 
 /** convert a string in base-RADIX to a big-endian number, denoted by num     */
 static void numRadix( const rbase_t* s, size_t len, uint8_t* num, size_t bytes )
 {
-    size_t i;
+    size_t i, d;
     memset( num, 0, bytes );
-    for (i = 0; i < len; ++i)  addRxdigit( num, bytes, s[i] );
-}
-
-/** append a byte to a big-endian number, represented as a base-RADIX string. */
-static void appendByte( rbase_t* str, size_t N, size_t b )
-{
-    while (N--)
+    for ( ; len--; ++s)
     {
-        b += str[N] << 8;
-        str[N] = b % RADIX;                      /*  num = num << 8 + b       */
-        b /= RADIX;
+        for (d = *s, i = bytes; i; d >>= 8)
+        {
+            d += num[--i] * RADIX;               /*  num = num * RADIX + d    */
+            num[i] = (uint8_t) d;
+        }
     }
 }
 
 /** convert a big-endian number to its base-RADIX representation string: s    */
 static void strRadix( const uint8_t* num, size_t bytes, rbase_t* s, size_t len )
 {
-    size_t i;
+    size_t i, b;
     memset( s, 0, sizeof (rbase_t) * len );
-    for (i = 0; i < bytes; ++i)  appendByte( s, len, num[i] );
+    for ( ; bytes--; ++num)
+    {
+        for (b = *num, i = len; i; b /= RADIX)
+        {
+            b += s[--i] << 8;                    /*  num = num << 8 + b       */
+            s[i] = b % RADIX;
+        }
+    }
 }
 
 /** add two numbers in base-RADIX represented by q and p, so that p = p + q   */
@@ -2127,36 +2217,17 @@ static void numstrSub( const rbase_t* q, size_t N, rbase_t* p )
     }
 }
 
-/*----------------------------------------------------------------------------*\
-                            FPE-AES: main functions
-\*----------------------------------------------------------------------------*/
-#include <stdlib.h>
-#if FF_X == 3
-
-static void FF3round()
-{
-}
-
-static void FF3_Cipher()
-{
-    memcpy( P, tweak, 4 );
-    memcpy( P + 8, tweak + 4, 3 );
-    P[11] = P[3] << 4 & 0xF0;
-    P[3] &= 0xF0;                                /*  P[0..3]=TL,  P[8..11]=TR */
-}
-#else
-
 static size_t bf1, df1;                          /*  b and d constants in FF1 */
 
 /** apply the FF1 round at step i to the input string X with length `len`     */
 static void FF1round( const uint8_t i, const block_t P, const size_t u,
-                      const size_t len, rbase_t* X )
+                      const size_t len, rbase_t* Xe )
 {
-    block_t R = { 0 };
-    uint8_t *num = (void*) (X + (len + 1) / 2);  /*  use pre-allocated memory */
     size_t t = len - (~i & 1) * u;
+    block_t R = { 0 };
+    uint8_t *num = (void*) &Xe[(len + 1) / 2];   /*  use pre-allocated memory */
 
-    numRadix( X - t, len - u, num, bf1 );        /*  get NUM_radix(B)         */
+    numRadix( Xe - t, len - u, num, bf1 );       /*  get NUM_radix(B)         */
     t = bf1 % BLOCKSIZE;
     R[LAST - t] = i;
     memcpy( R + BLOCKSIZE - t, num, t );         /* feed NUMradix(B) into PRF */
@@ -2167,11 +2238,11 @@ static void FF1round( const uint8_t i, const block_t P, const size_t u,
     memcpy( num, R, sizeof R );                  /* R = PRF(P || Q)           */
     for (num += t * BLOCKSIZE; t; num -= BLOCKSIZE)
     {
-        memcpy( num, R, sizeof R );              /* num = R || R || R || ...  */
+        memcpy( num, R, sizeof R );
         xorWith( num, LAST, t-- );               /* num = R || R ^ [i] ||...  */
         rijndaelEncrypt( num, num );             /* S = R || Enc(R ^ [i])...  */
     }
-    strRadix( num, df1, X, u );                  /* take first d bytes of S   */
+    strRadix( num, df1, Xe, u );                 /* take first d bytes of S   */
 }
 
 /** encrypt/decrypt a base-RADIX string X with length len using FF1 algorithm */
@@ -2212,6 +2283,11 @@ static void FF1_Cipher( const char mode, const uint8_t* key, const size_t len,
 }
 #endif /* FF_X */
 
+/*----------------------------------------------------------------------------*\
+                            FPE-AES: main functions
+\*----------------------------------------------------------------------------*/
+#include <stdlib.h>
+
 /** allocate the required memory and validate the input string in FPE mode... */
 static char FPEsetup( const string_t str, const size_t len, rbase_t** indices )
 {
@@ -2219,10 +2295,13 @@ static char FPEsetup( const string_t str, const size_t len, rbase_t** indices )
     size_t i = (len + 1) / 2;
     size_t j = (len + i) * sizeof (rbase_t);
 
-#if FF_X != 3                                    /*  extra memory is required */
+#if FF_X == 3
+    i *= sizeof (rbase_t);
+    j += (i < KEYSIZE) * (KEYSIZE - i);
+#else                                            /*  extra memory is required */
     bf1 = (size_t) (LOGRDX * i + 8 - 1e-10) >> 3;
     df1 = (bf1 + 7) & ~3UL;                      /*  ..whose size is at least */
-    j += (df1 + LAST) & ~LAST;                   /*  ..ceil(d/16) blocks      */
+    j += (df1 + LAST) & ~LAST;                   /*  ..ceil( d/16 ) blocks    */
 #endif
     if (len < MINLEN || (*indices = malloc( j )) == NULL)
     {
@@ -2242,11 +2321,10 @@ static char FPEsetup( const string_t str, const size_t len, rbase_t** indices )
 }
 
 /** make the output string after completing FPE encrypt/decryption procedures */
-static void FPEfinalize( const rbase_t* index, const size_t len, void** output )
+static void FPEfinalize( const rbase_t* index, size_t len, void** output )
 {
     string_t alpha = ALPHABET, *s = *output;
-    size_t i;
-    for (i = 0; i < len; ++i)  s[i] = alpha[*index++];
+    while (len--)  *s++ = alpha[*index++];
 }
 
 /**

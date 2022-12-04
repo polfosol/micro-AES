@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.h
  Author      : polfosol
- Version     : 9.8.1.0
+ Version     : 9.9.0.0
  Copyright   : copyright © 2022 - polfosol
  Description : μAES ™ is a minimalist all-in-one library for AES encryption
  ==============================================================================

@@ -4,7 +4,7 @@
  Author      : polfosol
  Version     : 1.1.0.0
  Copyright   : copyright © 2022 - polfosol
- Description : illustrating how the OpenSSL's vectors for AES-OCB mode are used
+ Description : illustrating how to validate OpenSSL's vectors for AES-OCB mode
  ==============================================================================
  */
 

@@ -9,6 +9,7 @@
   <Dependencies/>
   <VirtualDirectory Name="src">
     <File Name="micro_aes.h"/>
+    <File Name="micro_fpe.h"/>
     <File Name="micro_aes.c"/>
     <File Name="main.c"/>
   </VirtualDirectory>

@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.c
  Author      : polfosol
- Version     : 9.9.0.0
+ Version     : 9.9.6.0
  Copyright   : copyright © 2022 - polfosol
  Description : ANSI-C compatible implementation of µAES ™ library.
  ==============================================================================
@@ -1238,36 +1238,35 @@ char AES_GCM_decrypt( const uint8_t* key, const uint8_t* nonce,
 
 /** this function calculates the CBC-MAC of plaintext and authentication data */
 static void CBCMac( const block_t iv, const void* aData, const void* pntxt,
-                    const size_t aDataLen, const size_t ptextLen, block_t cm )
+                    const size_t aDataLen, const size_t ptextLen, block_t M )
 {
     block_t A = { 0 };
     uint8_t p, s = BLOCKSIZE - 2;
-    memcpy( cm, iv, BLOCKSIZE );                 /*  initialize CBC-MAC       */
+    memcpy( M, iv, BLOCKSIZE );                  /*  initialize CBC-MAC       */
 
-    cm[0] |= (CCM_TAG_LEN - 2) << 2;             /*  set some flags on M_0    */
-    putValueB( cm, LAST, ptextLen );             /*  copy data size into M_0  */
-    if (aDataLen)                                /*  <-- else: M_* = M_0      */
+    M[0] |= (CCM_TAG_LEN - 2) << 2;              /*  set some flags on M_0    */
+    putValueB( M, LAST, ptextLen );              /*  copy data size into M_0  */
+    if (aDataLen)                                /*  feed aData into CBC-MAC  */
     {
         if (aDataLen < s)  s = aDataLen;
         p = aDataLen < 0xFF00 ? 1 : 5;
-        putValueB( A, p, aDataLen );             /*  len_id = aDataLen        */
+        putValueB( A, p, aDataLen );             /*  copy aDataLen into A     */
         if (p == 5)
         {
             s -= 4;
-            putValueB( A, 1, 0xFFFE );           /*  prepend FFFE to len_id   */
+            A[0] = 0xFF;  A[1] = 0xFE;           /*  prepend FFFE to aDataLen */
         }
         memcpy( A + p + 1, aData, s );           /*  A = len_id ~~ ADATA      */
-        cm[0] |= 0x40;
-        rijndaelEncrypt( cm, cm );               /*  M_* = Enc( flagged M_0 ) */
-        xorBlock( A, cm );
+        M[0] |= 0x40;
+        rijndaelEncrypt( M, M );                 /*  M_* = Enc( flagged M_0 ) */
     }
 
-    rijndaelEncrypt( cm, cm );                   /*  M_1 = Enc( M_* ^ A ),    */
+    MAC( A, sizeof A, M, &rijndaelEncrypt, M );  /*  CBC-MAC start of ADATA   */
     if (aDataLen > s)                            /*  CBC-MAC rest of adata    */
     {
-        MAC( (char const*) aData + s, aDataLen - s, cm, &rijndaelEncrypt, cm );
+        MAC( (char const*) aData + s, aDataLen - s, M, &rijndaelEncrypt, M );
     }
-    MAC( pntxt, ptextLen, cm, &rijndaelEncrypt, cm );
+    MAC( pntxt, ptextLen, M, &rijndaelEncrypt, M );
 }
 
 /**
@@ -1854,24 +1853,24 @@ char AES_OCB_decrypt( const uint8_t* key, const uint8_t* nonce,
              KW-AES: Main functions for AES key-wrapping (RFC-3394)
 \*----------------------------------------------------------------------------*/
 #if IMPLEMENT(KWA)
-#define Hb  (BLOCKSIZE / 2)                      /*  size of half-blocks      */
+#define HB  (BLOCKSIZE / 2)                      /*  size of half-blocks      */
 /**
  * @brief   wrap the input secret whose size is a multiple of 8 and >= 16
  * @param   kek       key-encryption-key a.k.a master key
  * @param   secret    input plain text secret
- * @param   secretLen size of input, must be a multiple of Hb (half-block size)
- * @param   wrapped   wrapped secret. note: size of output = secretLen + Hb
+ * @param   secretLen size of input, must be a multiple of HB (half-block size)
+ * @param   wrapped   wrapped secret. note: size of output = secretLen + HB
  * @return            error if # of half-blocks is less than 2 or needs padding
  */
 char AES_KEY_wrap( const uint8_t* kek,
                    const uint8_t* secret, const size_t secretLen, uint8_t* wrapped )
 {
     uint8_t A[BLOCKSIZE], *r, i;
-    count_t n = secretLen / Hb, j;               /*  number of semi-blocks    */
-    if (n < 2 || secretLen % Hb)  return ENCRYPTION_FAILURE;
+    count_t n = secretLen / HB, j;               /*  number of semi-blocks    */
+    if (n < 2 || secretLen % HB)  return ENCRYPTION_FAILURE;
 
-    memset( A, 0xA6, Hb );                       /*  initialization vector    */
-    memcpy( wrapped + Hb, secret, secretLen );   /*  copy input to the output */
+    memset( A, 0xA6, HB );                       /*  initialization vector    */
+    memcpy( wrapped + HB, secret, secretLen );   /*  copy input to the output */
     AES_SetKey( kek );
 
     for (i = 0; i < 6; ++i)
@@ -1879,14 +1878,14 @@ char AES_KEY_wrap( const uint8_t* kek,
         r = wrapped;
         for (j = 0; j++ < n; )
         {
-            r += Hb;
-            memcpy( A + Hb, r, Hb );             /*  B = Enc(A | R[j])        */
-            rijndaelEncrypt( A, A );             /*  R[j] = LSB(64, B)        */
-            memcpy( r, A + Hb, Hb );             /*  A = MSB(64, B) ^ t       */
-            xorWith( A, Hb - 1, n * i + j );
+            r += HB;
+            memcpy( A + HB, r, HB );             /*  C = Enc(A | R[j])        */
+            rijndaelEncrypt( A, A );             /*  R[j] = LSB(64, C)        */
+            memcpy( r, A + HB, HB );             /*  A = MSB(64, C) ^ t       */
+            xorWith( A, HB - 1, n * i + j );
         }
     }
-    memcpy( wrapped, A, Hb );
+    memcpy( wrapped, A, HB );
 
     BURN( RoundKey );
     return ENDED_IN_SUCCESS;
@@ -1897,33 +1896,33 @@ char AES_KEY_wrap( const uint8_t* kek,
  * @param   kek       key-encryption-key a.k.a master key
  * @param   wrapped   cipher-text input, i.e. wrapped secret.
  * @param   wrapLen   size of ciphertext/wrapped input in bytes
- * @param   secret    unwrapped secret whose size = wrapLen - Hb
+ * @param   secret    unwrapped secret whose size = wrapLen - HB
  * @return            a value indicating whether decryption was successful
  */
 char AES_KEY_unwrap( const uint8_t* kek,
                      const uint8_t* wrapped, const size_t wrapLen, uint8_t* secret )
 {
     uint8_t A[BLOCKSIZE], *r, i;
-    count_t n = wrapLen / Hb - 1, j;             /*  number of semi-blocks    */
-    if (n < 2 || wrapLen % Hb)  return DECRYPTION_FAILURE;
+    count_t n = wrapLen / HB - 1, j;             /*  number of semi-blocks    */
+    if (n < 2 || wrapLen % HB)  return DECRYPTION_FAILURE;
 
-    memcpy( A, wrapped, Hb );                    /*  authentication vector    */
-    memcpy( secret, wrapped + Hb, wrapLen - Hb );
+    memcpy( A, wrapped, HB );                    /*  authentication vector    */
+    memcpy( secret, wrapped + HB, wrapLen - HB );
     AES_SetKey( kek );
 
     for (i = 6; i--; )
     {
-        r = secret + n * Hb;
+        r = secret + n * HB;
         for (j = n; j; --j)
         {
-            r -= Hb;
-            xorWith( A, Hb - 1, n * i + j );
-            memcpy( A + Hb, r, Hb );             /*  B = Dec(A ^ t | R[j])    */
-            rijndaelDecrypt( A, A );             /*  A = MSB(64, B)           */
-            memcpy( r, A + Hb, Hb );             /*  R[j] = LSB(64, B)        */
+            r -= HB;
+            xorWith( A, HB - 1, n * i + j );
+            memcpy( A + HB, r, HB );             /*  C = Dec(A ^ t | R[j])    */
+            rijndaelDecrypt( A, A );             /*  A = MSB(64, C)           */
+            memcpy( r, A + HB, HB );             /*  R[j] = LSB(64, C)        */
         }
     }
-    while (++i != Hb)  j |= A[i] ^ 0xA6;         /*  authenticate/error check */
+    while (++i != HB)  j |= A[i] ^ 0xA6;         /*  authenticate/error check */
 
     BURN( RoundKey );
     return j ? AUTHENTICATION_FAILURE : ENDED_IN_SUCCESS;
@@ -1966,7 +1965,7 @@ static void addLBlocks( const uint8_t* x, const uint8_t len, uint8_t* y )
     for (i = 0; i < len; s >>= 8)
     {
         s += x[i] + y[i];
-        y[i++] = (uint8_t) s;                    /*  s >> 8 is the overflow   */
+        y[i++] = (uint8_t) s;                    /*  s >> 8 is overflow/carry */
     }
     if (len == Sp)  modLPoly( y, (uint8_t) s );
 }
@@ -2059,12 +2058,13 @@ void AES_Poly1305( const uint8_t* keys, const block_t nonce,
 #define RADIX    10                              /*  strlen (ALPHABET)        */
 #define LOGRDX   3.321928095                     /*  log2 (RADIX)             */
 #define MINLEN   6                               /*  ceil (6 / log10 (RADIX)) */
+#define MAXLEN   56                              /*  for FF3-1 only           */
 #endif
 
-#if RADIX <= 0xFF
-typedef uint8_t  rbase_t;                        /*  num type in base-radix   */
+#if RADIX > 0x100
+typedef unsigned short  rbase_t;                 /*  num type in base-radix   */
 #else
-typedef unsigned short  rbase_t;
+typedef uint8_t  rbase_t;
 #endif
 
 #if FF_X == 3
@@ -2102,8 +2102,8 @@ static void strRadix( const uint8_t* num, uint8_t bytes, rbase_t* s, uint8_t len
 /** add two numbers in base-RADIX represented by q and p, so that p = p + q   */
 static void numstrAdd( const rbase_t* q, const uint8_t N, rbase_t* p )
 {
-    size_t a, c = 0, i;
-    for (i = 0; i < N; c = a >= RADIX)
+    uint8_t a, c = 0, i;
+    for (i = 0; i < N; c = a >= RADIX)           /* little-endian addition    */
     {
         a = p[i] + q[i] + c;
         p[i++] = (rbase_t) (a % RADIX);
@@ -2113,8 +2113,8 @@ static void numstrAdd( const rbase_t* q, const uint8_t N, rbase_t* p )
 /** subtract two numbers in base-RADIX represented by q and p, so that p -= q */
 static void numstrSub( const rbase_t* q, const uint8_t N, rbase_t* p )
 {
-    size_t s, c = 0, i;
-    for (i = 0; i < N; c = s < RADIX)
+    uint8_t s, c = 0, i;
+    for (i = 0; i < N; c = s < RADIX)            /* little-endian subtraction */
     {
         s = RADIX + p[i] - q[i] - c;
         p[i++] = (rbase_t) (s % RADIX);
@@ -2142,24 +2142,26 @@ static void FF3_Cipher( const char mode, const uint8_t* key,
 {
     uint8_t u = (len + mode) >> 1, r = mode ? 0 : 8, i, *k;
     uint8_t T[8];
-
     memcpy( T, tweak, 7 );
     T[7] = T[3] << 4 & 0xF0;
     T[3] &= 0xF0;
-    T[7] = 0x73; T[3] = 10;
     X += len;                                    /* go to end of the input    */
 
-    for (i = KEYSIZE, k = (void*) X; i; )  k[--i] = *key++;
-    AES_SetKey( k );                             /*       reversed key        */
+    /* note that the official test vectors are based on the old version of FF3,
+     * which uses a 64-bit tweak. you can uncomment this line to verify them:
+    memcpy( T, tweak, 8 );                                                    */
 
-    for (i = r; i < 8; ++i, u = len - u)
+    for (i = KEYSIZE, k = (void*) X; i; )  k[--i] = *key++;
+    AES_SetKey( k );                             /*           reversed key    */
+
+    for (i = r; i < 8; ++i, u = len - u)         /*      Feistel procedure    */
     {
-        FF3round( i, T, u, len, X );             /* encryption rounds         */
+        FF3round( i, T, u, len, X );             /*      encryption rounds    */
         numstrAdd( X, u, X - (i & 1 ? u : len) );
     }
     for (i = r; i--; u = len - u)
     {
-        FF3round( i, T, u, len, X );             /* decryption rounds         */
+        FF3round( i, T, u, len, X );             /*      decryption rounds    */
         numstrSub( X, u, X - (i & 1 ? u : len) );
     }
 }
@@ -2296,6 +2298,7 @@ static char FPEsetup( const string_t str, const size_t len, rbase_t** indices )
     size_t j = (len + i) * sizeof (rbase_t);
 
 #if FF_X == 3
+    if (len > MAXLEN)  return 'L';
     i *= sizeof (rbase_t);
     j += (i < KEYSIZE) * (KEYSIZE - i);
 #else                                            /*  extra memory is required */

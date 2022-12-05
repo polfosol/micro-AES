@@ -1,17 +1,17 @@
 /*
  ==============================================================================
- Name        : XTStest.c
+ Name        : FPEtest.c
  Author      : polfosol
- Version     : 2.3.0.0
+ Version     : 1.1.0.0
  Copyright   : copyright © 2022 - polfosol
- Description : illustrating how to validate NIST's vectors for AES-XTS mode
+ Description : illustrating how to validate NIST's vectors for AES-FPE mode
  ==============================================================================
  */
 
 #include <stdio.h>
 #include "../micro_aes.h"
 
-#define TESTFILEPATH "XTSGenAES128.rsp"
+#define TESTFILEPATH "FPE_FF1&FF3&FF3-1.tv"
 
 static void str2bytes(const char* str, uint8_t* bytes)
 #define char2num(c)  (c > '9' ? (c & 7) + 9 : c & 0xF)
@@ -26,7 +26,7 @@ static void str2bytes(const char* str, uint8_t* bytes)
 }
 
 static void bytes2str(const uint8_t* bytes, char* str, size_t len)
-#define num2char(x)  ((x) > 9 ? 'a' - 10 + (x) : '0' + (x))
+#define num2char(x)  ((x) > 9 ? 'A' - 10 + (x) : '0' + (x))
 {
     size_t i, j;
     for (i = 0, j = 0; i < len; ++i)
@@ -37,39 +37,52 @@ static void bytes2str(const uint8_t* bytes, char* str, size_t len)
     str[j] = 0;
 }
 
-static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* c, uint8_t n, char* r)
+static int ciphertest(uint8_t* key, uint8_t* tk, char* a, char* p, char* c,
+                      uint8_t n, uint8_t nt, char* r)
 {
-    char sk[4*AES_KEY_LENGTH + 16], si[40], sp[0x80], sc[0x80], msg[30];
-    uint8_t tmp[0x80], t = 0;
+    char sk[2*AES_KEY_LENGTH + 16], st[40], msg[30], tmp[80], t = 0;
     sprintf(msg, "%s", "success");
-
-    AES_XTS_encrypt(key, iv, p, n, tmp);
+#if FF_X == 3
+    AES_FPE_encrypt(key, tk, p, n, tmp);
+#else
+    AES_FPE_encrypt(key, tk, nt, p, n, tmp);
+#endif
     if (memcmp(c, tmp, n))
     {
         sprintf(msg, "%s", "encrypt failure");
         t = 1;
     }
     memset(tmp, 0xcc , sizeof tmp);
-    AES_XTS_decrypt(key, iv, c, n, tmp);
+#if FF_X == 3
+    AES_FPE_decrypt(key, tk, c, n, tmp);
+#else
+    AES_FPE_decrypt(key, tk, nt, c, n, tmp);
+#endif
     if (memcmp(p, tmp, n))
     {
         sprintf(msg, "%sdecrypt failure", t ? "encrypt & " : "");
         t |= 2;
     }
-    bytes2str(key, sk, 2*AES_KEY_LENGTH);
-    bytes2str(iv, si, 16);
-    bytes2str(p, sp, n);
-    bytes2str(c, sc, n);
-    sprintf(r, "%s\nK: %s\ni: %s\nP: %s\nC: %s", msg, sk, si, sp, sc);
+    bytes2str(key, sk, AES_KEY_LENGTH);
+    bytes2str(tk, st, nt);
+    sprintf(r, "%s\nA: %s\nK: %s\nT: %s\nP: %s\nC: %s", msg, a, sk, st, p, c);
     return t;
 }
 
 int main()
 {
-    const char *linehdr[] = { "Key = ", "i = ", "PT = ", "CT = ", "DataUnitLen = " };
-    char buffer[0x800], *value = "";
-    size_t i, n = 0, pass = 0, df = 0, ef = 0, s = 0, sk = 0;
-    uint8_t key[2*AES_KEY_LENGTH], iv[16], p[0x80], c[0x80], ul[2];
+    const char *linehdr[] =
+    {
+        "Method = ", "Alphabet = ", "Key = ", "Tweak = ", "PT = ", "CT = "
+    }, *alphabets[] =
+    {
+        "0123456789", "abcdefghijklmnopqrstuvwxyz", "0123456789abcdefghijklmnopqrstuvwxyz",
+        "0123456789abcdefghijklmnop", "**", "**",
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    };
+    char buffer[0x500], alpha[70], p[80], c[80], m = 0, a = 0, *value = "";
+    size_t pass = 0, df = 0, ef = 0;
+    uint8_t i, key[32], twk[16], n = 0, sp = 0, st = 0, sk = 0;
     FILE *fp, *fs, *ferr;
 
     fp = fopen(TESTFILEPATH, "r");
@@ -87,7 +100,7 @@ int main()
     {
         buffer[strcspn(buffer, "\n")] = 0;
         if (strlen(buffer) < 4) continue;
-        for (i = 0; i < 5; i++)
+        for (i = 0; i < 6; i++)
         {
             if (strncmp(buffer, linehdr[i], strlen(linehdr[i])) == 0)
             {
@@ -98,30 +111,41 @@ int main()
         switch (i)
         {
         case 0:
-            sk = strlen(value) / 2;
-            if (sk == 2 * AES_KEY_LENGTH) str2bytes(value, key);
+            m = (value[2] == '3') ^ (FF_X != 3);
             break;
         case 1:
-            str2bytes(value, iv);
+            for (a = 0; a < 6; a++)
+            {
+                if (strncmp(value, alphabets[a], strlen(value)) == 0) break;
+            }
+            strcpy(alpha, value);
             break;
         case 2:
-            str2bytes(value, p);
-            ++n;
+            sk = strlen(value) / 2;
+            str2bytes(value, key);
             break;
         case 3:
-            str2bytes(value, c);
-            ++n;
+            st = strlen(value) / 2; ++n;
+            str2bytes(value, twk);
             break;
         case 4:
-            str2bytes(value, ul);
+            sp = strlen(value);
+            strcpy(p, value);
+            break;
+        case 5:
+            ++n;
+            strcpy(c, value);
             break;
         }
         if (n == 2)
         {
-            s = (ul[0] >> 4) *100 + (ul[0] & 15) *10 + (ul[1] >> 4);
-            if (sk == 2 * AES_KEY_LENGTH && s % 8 == 0)
+            if (FF_X == 3 && st > 7 && twk[3] != 0) /* old FF3 with 8-byte tweak */
             {
-                n = ciphertest(key, iv, p, c, s / 8, buffer);
+                m = 0; /* see the comments of function `FF3_Cipher` in source file */
+            }
+            if (m && a == CUSTOM_ALPHABET && sk == AES_KEY_LENGTH)
+            {
+                n = ciphertest(key, twk, alpha, p, c, sp, st, buffer);
                 fprintf(n ? ferr : fs, "%s\n", buffer); /* save the log */
                 if (n == 0) ++pass;
                 if (n & 1) ++ef;
@@ -131,7 +155,7 @@ int main()
         }
     }
     printf ("test cases: %d\nsuccessful: %d\nfailed encrypt: %d, failed decrypt: %d\n",
-        pass + ef + df, pass, ef, df);
+        pass + ef + (ef > df ? ef - df : df - ef), pass, ef, df);
 
     fclose(fp); fclose(fs); fclose(ferr);
     if (ef + df == 0)

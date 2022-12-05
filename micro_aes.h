@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.h
  Author      : polfosol
- Version     : 9.9.0.0
+ Version     : 9.9.6.0
  Copyright   : copyright © 2022 - polfosol
  Description : μAES ™ is a minimalist all-in-one library for AES encryption
  ==============================================================================
@@ -76,11 +76,11 @@ Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
  -----------------------------------------------------------------------------*/
 
 #if ECB || CBC || XEX || KWA || M_RIJNDAEL
-#define DECRYPTION   1
+#define DECRYPTION      1  /* only these modes need the decrypt part of AES   */
 #endif
 
 #if ECB || (CBC && !CTS) || (XEX && !XTS)
-#define AES_PADDING  0     /* other valid values:  (1) PKCS#7  (2) IEC7816-4  */
+#define AES_PADDING     0  /* other valid values:  (1) PKCS#7  (2) IEC7816-4  */
 #endif
 
 #if FPE
@@ -112,14 +112,16 @@ Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
 #endif
 
 /**----------------------------------------------------------------------------
-Since stdint.h is not a part of ANSI-C, we may need a 'trick' to use uint8_t
+Since <stdint.h> is not a part of ANSI-C, we may need a 'trick' to use uint8_t
  -----------------------------------------------------------------------------*/
 #include <string.h>
 #if __STDC_VERSION__ > 199900L || __cplusplus > 201100L || defined(_MSC_VER)
 #include <stdint.h>
 #else
 #include <limits.h>
+#if CHAR_BIT == 8
 typedef unsigned char  uint8_t;
+#endif
 #if INT_MAX > 100000L
 typedef int   int32_t;
 #else
@@ -468,10 +470,6 @@ The error codes and key length should be defined here for external references:
 /**¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯**\
 ¦               Notes and remarks about the above-defined macros               ¦
 --------------------------------------------------------------------------------
-
-* Some AES modes just use the 'encryption' part of the Rijndael algorithm. So if
-    you are NOT using the decryption functions of ECB/CBC/KWA/XEX modes, you can
-    safely disable DECRYPTION macro and save a few kilobytes in compiled code.
 
 * In EBC/CBC/XEX modes, the size of input must be a multiple of block-size.
     Otherwise it needs to be padded. The simplest (default) padding mode is to

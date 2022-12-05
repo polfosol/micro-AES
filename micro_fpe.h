@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_fpe.h
  Author      : polfosol
- Version     : 1.0.0.0
+ Version     : 1.2.0.0
  Copyright   : copyright © 2022 - polfosol
  Description : this file contains some sample alphabets for FPE mode of μAES ™
  ==============================================================================
@@ -18,11 +18,9 @@
  * their corresponding macro definitions. It is straightforward to set another
  * custom alphabet according to these samples.  ------------------------------*/
 
-#if CUSTOM_ALPHABET > 9
-#define NON_ASCII_CHARACTER_SET
-#endif
+#define NON_ASCII_CHARACTER_SET  (CUSTOM_ALPHABET >= 10)
 
-#ifdef NON_ASCII_CHARACTER_SET
+#if NON_ASCII_CHARACTER_SET
 #include <wchar.h>
 #include <locale.h>
 #define  string_t  wchar_t*
@@ -37,12 +35,12 @@
 #endif
 
 /**----------------------------------------------------------------------------
- lowercase hex strings
+ lowercase english letters
  -----------------------------------------------------------------------------*/
 #if CUSTOM_ALPHABET == 1
-#define ALPHABET "0123456789abcdef"
-#define RADIX    16
-#define LOGRDX   4
+#define ALPHABET "abcdefghijklmnopqrstuvwxyz"
+#define RADIX    26
+#define LOGRDX   4.700439718
 #endif
 
 /**----------------------------------------------------------------------------
@@ -55,9 +53,27 @@
 #endif
 
 /**----------------------------------------------------------------------------
- English letters character set
+ a character set with length 26
  -----------------------------------------------------------------------------*/
 #if CUSTOM_ALPHABET == 3
+#define ALPHABET "0123456789abcdefghijklmnop"
+#define RADIX    26
+#define LOGRDX   4.700439718
+#endif
+
+/**----------------------------------------------------------------------------
+ uppercase hex strings
+ -----------------------------------------------------------------------------*/
+#if CUSTOM_ALPHABET == 4
+#define ALPHABET "0123456789ABCDEF"
+#define RADIX    16
+#define LOGRDX   4
+#endif
+
+/**----------------------------------------------------------------------------
+ the English alphabet
+ -----------------------------------------------------------------------------*/
+#if CUSTOM_ALPHABET == 5
 #define ALPHABET "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 #define RADIX    52
 #define LOGRDX   5.700439718
@@ -66,7 +82,7 @@
 /**----------------------------------------------------------------------------
  base-64 encoded strings (RFC-4648), with no padding character
  -----------------------------------------------------------------------------*/
-#if CUSTOM_ALPHABET == 4
+#if CUSTOM_ALPHABET == 6
 #define ALPHABET "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 #define RADIX    64
 #define LOGRDX   6
@@ -75,7 +91,7 @@
 /**----------------------------------------------------------------------------
  base-85 encoded strings (RFC-1924)
  -----------------------------------------------------------------------------*/
-#if CUSTOM_ALPHABET == 5
+#if CUSTOM_ALPHABET == 7
 #define ALPHABET "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~"
 #define RADIX    85
 #define LOGRDX   6.409390936
@@ -94,9 +110,9 @@
  Persian alphabet
  -----------------------------------------------------------------------------*/
 #if CUSTOM_ALPHABET == 11
-#define ALPHABET L"ءأئؤابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی"
-#define RADIX    36
-#define LOGRDX   5.169925001
+#define ALPHABET L"ءئاآبپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی"
+#define RADIX    35
+#define LOGRDX   5.129283017
 #endif
 
 
@@ -109,6 +125,11 @@
 #define MINLEN  (4 + (RADIX < 32) + (RADIX < 16) + (RADIX < 10) + (RADIX < 8))
 #else
 #define MINLEN  (20 / (RADIX >> 1) - (RADIX & 1) - 6 * (RADIX == 3))
+#endif
+
+#if FF_X == 3
+#include <math.h>
+#define MAXLEN  (2 * (int) (96 / log( RADIX ) * log( 2 )))
 #endif
 
 #endif /* header guard */

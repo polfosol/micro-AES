@@ -4,7 +4,7 @@
  Author      : polfosol
  Version     : 2.0.0.0
  Copyright   : copyright © 2022 - polfosol
- Description : illustrating how the NIST's vectors for AES-GCM mode are used
+ Description : illustrating how to validate NIST's vectors for AES-GCM mode
  ==============================================================================
  */
 

@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.c
  Author      : polfosol
- Version     : 9.9.6.0
+ Version     : 9.9.6.6
  Copyright   : copyright © 2022 - polfosol
  Description : ANSI-C compatible implementation of µAES ™ library.
  ==============================================================================
@@ -395,21 +395,7 @@ void AES_Cipher( const uint8_t* key, const char mode, const block_t x, block_t y
 #define incBlock(block, big)      ++block[big ? LAST : 0]
 #else
 
-#if CTR
-
-/** increment the value of a counter block, regarding its endian-ness ....... */
-static void incBlock( block_t block, const char big )
-{
-    uint8_t i;
-    if (big)                                     /*  big-endian counter       */
-    {
-        for (i = LAST; !++block[i] && i--; );    /*  (inc until no overflow)  */
-    }
-    else
-    {
-        for (i = 0; !++block[i] && i < 4; ++i);
-    }
-}
+#if CTR || FPE
 
 /** copy big endian value to the block, starting at the specified position... */
 static void putValueB( block_t block, uint8_t pos, size_t val )
@@ -431,7 +417,7 @@ static void putValueL( block_t block, uint8_t pos, size_t val )
 }
 #endif
 
-#if KWA
+#if KWA || FPE
 
 /** xor a block with a big-endian value, whose LSB is at the specified pos... */
 static void xorWith( uint8_t* block, uint8_t pos, size_t val )
@@ -441,42 +427,44 @@ static void xorWith( uint8_t* block, uint8_t pos, size_t val )
     while (val >>= 8);
 }
 #endif
-#endif /* SMALL CIPHER */
 
+#if CTR
+
+/** increment the value of a counter block, regarding its endian-ness ....... */
+static void incBlock( block_t block, const char big )
+{
+    uint8_t i;
+    if (big)                                     /*  big-endian counter       */
+    {
+        for (i = LAST; !++block[i] && i--; );    /*  (inc until no overflow)  */
+    }
+    else
+    {
+        for (i = 0; !++block[i] && i < 4; ++i);
+    }
+}
+#endif
+#endif /* SMALL CIPHER */
 
 #ifdef AES_PADDING
 
 /** in ECB or CBC without CTS, the last (partial) block has to be padded .... */
-static char padBlock( const uint8_t* input, const uint8_t len, block_t output )
+static char padBlock( const uint8_t len, block_t block )
 {
 #if AES_PADDING == 2
-    memset( output + len, 0, BLOCKSIZE - len );  /*   ISO/IEC 7816-4 padding  */
-    output[len] = 0x80;
+    memset( block + len, 0, BLOCKSIZE - len );   /*   ISO/IEC 7816-4 padding  */
+    block[len] = 0x80;
 #elif AES_PADDING
     uint8_t p = BLOCKSIZE - len;                 /*   PKCS#7 padding          */
-    memset( output + len, p, p );
+    memset( block + len, p, p );
 #else
     if (len == 0)  return 0;                     /*   default padding         */
-    memset( output + len, 0, BLOCKSIZE - len );
+    memset( block + len, 0, BLOCKSIZE - len );
 #endif
-
-    memcpy( output, input, len );
     return 1;
+
 }
 #endif /* PADDING */
-
-#if CTS || AEAD_MODES
-
-/** The input block `y` is xor-ed with `x` and then mixed with block `src`... */
-static void xorThenMix( const uint8_t* x, const uint8_t len,
-                        const block_t src, fmix_t mix, block_t y )
-{
-    uint8_t i;
-    for (i = 0; i < len; ++i)  y[i] ^= x[i];
-
-    mix( src, y );                               /*  Y = mix( S, Y ^ X )      */
-}
-#endif
 
 #if CBC || CFB || OFB || CTR || OCB
 
@@ -498,9 +486,9 @@ static void mixThenXor( const block_t b, fmix_t mix, block_t tmp,
 static void doubleGF128B( block_t block )
 {
     int i, s = 0;
-    for (i = BLOCKSIZE; i--; s >>= 8)            /* loop from last to first,  */
+    for (i = BLOCKSIZE; i; s >>= 8)              /* loop from last to first,  */
     {                                            /* left-shift each byte and  */
-        s |= block[i] << 1;                      /* ..add the previous MSB.   */
+        s |= block[--i] << 1;                    /* ..add the previous MSB.   */
         block[i] = (uint8_t) s;
     }                                            /* if first MSB is carried:  */
     if (s)  block[LAST] ^= 0x87;                 /*   B ^= 10000111b (B.E.)   */
@@ -562,9 +550,9 @@ static void mulGF128( const block_t x, block_t y )
 static void halveGF128L( block_t block )
 {
     unsigned t = 0, i;
-    for (i = BLOCKSIZE; i--; t <<= 8)            /* the same as halveGF128B ↑ */
+    for (i = BLOCKSIZE; i; t <<= 8)              /* the same as halveGF128B ↑ */
     {                                            /* ..but with reversed bytes */
-        t |= block[i];
+        t |= block[--i];
         block[i] = (uint8_t) (t >> 1);
     }
     if (t & 0x100)  block[LAST] ^= 0xe1;         /* B ^= L.E 11100001b << 120 */
@@ -590,14 +578,14 @@ static void dotGF128( const block_t x, block_t y )
 }
 #endif /* GCM-SIV */
 
-#if AEAD_MODES
+#if AEAD_MODES || FPE
 
-/** the overall scheme of CMAC or GMAC hash functions: divide data into 128-bit
- * blocks; then xor and apply the digest/mixing function to each xor-ed block */
-static void MAC( const void* data, const size_t dataSize,
-                 const block_t seed, fmix_t mix, block_t result )
+/** xor the result with input data and then apply the digest/mixing function.
+ * repeat the process for each block of data until all blocks are digested... */
+static void xMac( const void* data, const size_t dataSize,
+                  const block_t seed, fmix_t mix, block_t result )
 {
-    uint8_t const r = dataSize % BLOCKSIZE, *x;
+    uint8_t const *x;
     count_t n = dataSize / BLOCKSIZE;            /*   number of full blocks   */
 
     for (x = data; n--; x += BLOCKSIZE)
@@ -605,9 +593,13 @@ static void MAC( const void* data, const size_t dataSize,
         xorBlock( x, result );                   /* M_next = mix(seed, M ^ X) */
         mix( seed, result );
     }
-    if (r == 0)  return;                         /* do the same with the last */
-    xorThenMix( x, r, seed, mix, result );       /*  ..partial block (if any) */
+    if (n = dataSize % BLOCKSIZE)
+    {
+        while (n--)  result[n] ^= x[n];
+        mix( seed, result );
+    }
 }
+#endif
 
 #if CMAC || SIV || EAX
 
@@ -623,8 +615,8 @@ static void cMac( const block_t D, const block_t Q,
     memcpy( M, endblock, r );                    /*  copy last block into M   */
     xorBlock( r < sizeof M ? Q : D, M );         /*  ..and pad( M; D, Q )     */
 
-    MAC( data, dataSize - r, mac, &rijndaelEncrypt, mac );
-    xorThenMix( M, sizeof M, mac, &rijndaelEncrypt, mac );
+    xMac( data, dataSize - r, mac, &rijndaelEncrypt, mac );
+    xMac( M, sizeof M, mac, &rijndaelEncrypt, mac );
 }
 
 typedef void (*fdouble_t)(block_t);              /* block-double function ptr */
@@ -640,17 +632,16 @@ static void getSubkeys( const uint8_t* key, fdouble_t dou, block_t D, block_t Q 
 }
 #endif
 
-#if INCREASE_SECURITY
+#if AEAD_MODES && INCREASE_SECURITY
 
 /** for constant-time comparison of memory blocks, to avoid timing attacks:   */
-static uint8_t constmemcmp( const uint8_t* src, const uint8_t* dst, uint8_t len )
+static uint8_t constmemcmp( const uint8_t* src, const uint8_t* dst, uint8_t n )
 {
-    uint8_t i, cmp = 0;
-    for (i = 0; i < len; ++i)  cmp |= src[i] ^ dst[i];
+    uint8_t cmp = 0;
+    while (n--)  cmp |= src[n] ^ dst[n];
     return cmp;
 }
 #endif
-#endif /* AEAD */
 
 
 /*----------------------------------------------------------------------------*\
@@ -667,17 +658,16 @@ static uint8_t constmemcmp( const uint8_t* src, const uint8_t* dst, uint8_t len 
 void AES_ECB_encrypt( const uint8_t* key,
                       const uint8_t* pntxt, const size_t ptextLen, uint8_t* crtxt )
 {
-    uint8_t const *x;
-    uint8_t *y = crtxt;
+    uint8_t *y;
     count_t n = ptextLen / BLOCKSIZE;            /*  number of full blocks    */
+    memcpy( crtxt, pntxt, ptextLen );            /*  copy plaintext to output */
 
     AES_SetKey( key );
-    for (x = pntxt; n--; x += BLOCKSIZE)
+    for (y = crtxt; n--; y += BLOCKSIZE)
     {
-        rijndaelEncrypt( x, y );                 /*  C = Enc(P)               */
-        y += BLOCKSIZE;
+        rijndaelEncrypt( y, y );                 /*  C = Enc(P)               */
     }
-    if (padBlock( x, ptextLen % BLOCKSIZE, y ))
+    if (padBlock( ptextLen % BLOCKSIZE, y ))
     {
         rijndaelEncrypt( y, y );
     }
@@ -695,15 +685,14 @@ void AES_ECB_encrypt( const uint8_t* key,
 char AES_ECB_decrypt( const uint8_t* key,
                       const uint8_t* crtxt, const size_t crtxtLen, uint8_t* pntxt )
 {
-    uint8_t const *x;
-    uint8_t *y = pntxt;
+    uint8_t *y;
     count_t n = crtxtLen / BLOCKSIZE;
+    memcpy( pntxt, crtxt, crtxtLen );
 
     AES_SetKey( key );
-    for (x = crtxt; n--; x += BLOCKSIZE)
+    for (y = pntxt; n--; y += BLOCKSIZE)
     {
-        rijndaelDecrypt( x, y );                 /*  P = Dec(C)               */
-        y += BLOCKSIZE;
+        rijndaelDecrypt( y, y );                 /*  P = Dec(C)               */
     }
     BURN( RoundKey );
 
@@ -730,17 +719,18 @@ char AES_ECB_decrypt( const uint8_t* key,
 char AES_CBC_encrypt( const uint8_t* key, const block_t iVec,
                       const uint8_t* pntxt, const size_t ptextLen, uint8_t* crtxt )
 {
-    uint8_t const *x = pntxt, *iv = iVec;
+    uint8_t const *iv = iVec;
     uint8_t r = ptextLen % BLOCKSIZE, *y;
     count_t n = ptextLen / BLOCKSIZE;
-
 #if CTS
+    block_t last = { 0 };
+
     if (!n)  return ENCRYPTION_FAILURE;
     r += (r == 0 && n > 1) * BLOCKSIZE;
-    n -= (r == BLOCKSIZE);                       /*  hold the last block      */
+    n -= (r == BLOCKSIZE);
+    memcpy( last, pntxt + n * BLOCKSIZE, r );    /*  hold the last block      */
 #endif
-    x += ptextLen - r;
-    memcpy( crtxt, pntxt, ptextLen - r );        /*  copy plaintext to output */
+    memcpy( crtxt, pntxt, ptextLen );            /*  do in-place encryption   */
 
     AES_SetKey( key );
     for (y = crtxt; n--; y += BLOCKSIZE)
@@ -752,15 +742,15 @@ char AES_CBC_encrypt( const uint8_t* key, const block_t iVec,
 #if CTS                                          /*  cipher-text stealing CS3 */
     if (r)
     {
-        memcpy( y, y - BLOCKSIZE, r );           /*  'steal' the cipher-text  */
-        y -= BLOCKSIZE;                          /*  ..to fill the last block */
-        xorThenMix( x, r, y, &rijndaelEncrypt, y );
+        y -= BLOCKSIZE;                          /*  or let  y = iv;          */
+        memcpy( y + BLOCKSIZE, y, r );           /*  'steal' the cipher-text  */
+        xorBlock( last, y );                     /*  ..to fill the last block */
 #else
-    if (padBlock( x, r, y ))
+    if (padBlock( r, y ))
     {
         xorBlock( iv, y );
-        rijndaelEncrypt( y, y );
 #endif
+        rijndaelEncrypt( y, y );
     }
     BURN( RoundKey );
     return ENDED_IN_SUCCESS;
@@ -797,13 +787,13 @@ char AES_CBC_decrypt( const uint8_t* key, const block_t iVec,
         xorBlock( iv, y );                       /*  IV_next = C              */
         iv = x;
         x += BLOCKSIZE;
-    }                                            /*  #if !CTS, surely r = 0   */
+    }                                            /*  r = 0 unless CTS enabled */
     if (r)
-    {                                            /*  P2  =  Dec(C1) ^ C2      */
+    {                                            /*  P2 =  Dec(C1) ^ C2       */
         mixThenXor( x, &rijndaelDecrypt, y, x + BLOCKSIZE, r, y + BLOCKSIZE );
         memcpy( y, x + BLOCKSIZE, r );
         rijndaelDecrypt( y, y );                 /*  copy C2 to Dec(C1): -> T */
-        xorBlock( iv, y );                       /*  P1 = IV ^ Dec(T)         */
+        xorBlock( iv, y );                       /*  P1 =  IV ^ Dec(T)        */
     }
     BURN( RoundKey );
 
@@ -941,13 +931,13 @@ static void CTR_Cipher( const block_t iCtr, const char big,
 {
     block_t c, enc;
     count_t n = dataSize / BLOCKSIZE;
-    uint8_t *y = output;
-    if (input != output)  memcpy( output, input, dataSize );
+    uint8_t *y;
 
+    memcpy( output, input, dataSize );           /* do in-place en/decryption */
     memcpy( c, iCtr, sizeof c );
     if (big > 1)  incBlock( c, 1 );              /* pre-increment for CCM/GCM */
 
-    for ( ; n--; y += BLOCKSIZE)
+    for (y = output; n--; y += BLOCKSIZE)
     {
         rijndaelEncrypt( c, enc );               /*  both in en[de]cryption:  */
         xorBlock( enc, y );                      /*  Y = Enc(Ctr) ^ X         */
@@ -999,6 +989,7 @@ void AES_CTR_decrypt( const uint8_t* key, const uint8_t* iv,
 
 /*----------------------------------------------------------------------------*\
        XEX-AES based modes (xor-encrypt-xor): demonstrating the main idea
+  + main functions of XTS-AES (XEX Tweaked-codebook with ciphertext Stealing)
 \*----------------------------------------------------------------------------*/
 #if IMPLEMENT(XTS)
 /**
@@ -1039,9 +1030,6 @@ static void XEX_Cipher( const uint8_t* keypair, fmix_t cipher,
     }
 }
 
-/*----------------------------------------------------------------------------*\
-    XTS-AES (XEX Tweaked-codebook with ciphertext Stealing): main functions
-\*----------------------------------------------------------------------------*/
 /**
  * @brief   encrypt the input plaintext using XTS-AES block-cipher method
  * @param   keys      two-part encryption key with a fixed size of 2*KEYSIZE
@@ -1151,9 +1139,9 @@ static void GHash( const block_t H, const void* aData, const void* crtxt,
     putValueB( buf, BLOCKSIZE - 9, adataLen * 8 );
     putValueB( buf, BLOCKSIZE - 1, crtxtLen * 8 );
 
-    MAC( aData, adataLen, H, &mulGF128, gsh );   /*  first digest AAD, then   */
-    MAC( crtxt, crtxtLen, H, &mulGF128, gsh );   /*  ..ciphertext, and then   */
-    MAC( buf, sizeof buf, H, &mulGF128, gsh );   /*  ..bit sizes into GHash   */
+    xMac( aData, adataLen, H, &mulGF128, gsh );  /*  first digest AAD, then   */
+    xMac( crtxt, crtxtLen, H, &mulGF128, gsh );  /*  ..ciphertext, and then   */
+    xMac( buf, sizeof buf, H, &mulGF128, gsh );  /*  ..bit sizes into GHash   */
 }
 
 /** encrypt zeros to get authentication subkey H, and prepare the IV for GCM. */
@@ -1244,8 +1232,8 @@ static void CBCMac( const block_t iv, const void* aData, const void* pntxt,
     uint8_t p, s = BLOCKSIZE - 2;
     memcpy( M, iv, BLOCKSIZE );                  /*  initialize CBC-MAC       */
 
-    M[0] |= (CCM_TAG_LEN - 2) << 2;              /*  set some flags on M_0    */
-    putValueB( M, LAST, ptextLen );              /*  copy data size into M_0  */
+    M[0] |= (CCM_TAG_LEN - 2) << 2;              /*  set some flags on M_*    */
+    putValueB( M, LAST, ptextLen );              /*  copy data size into M_*  */
     if (aDataLen)                                /*  feed aData into CBC-MAC  */
     {
         if (aDataLen < s)  s = aDataLen;
@@ -1256,17 +1244,17 @@ static void CBCMac( const block_t iv, const void* aData, const void* pntxt,
             s -= 4;
             A[0] = 0xFF;  A[1] = 0xFE;           /*  prepend FFFE to aDataLen */
         }
-        memcpy( A + p + 1, aData, s );           /*  A = len_id ~~ ADATA      */
+        memcpy( A + p + 1, aData, s );           /*  append ADATA             */
         M[0] |= 0x40;
-        rijndaelEncrypt( M, M );                 /*  M_* = Enc( flagged M_0 ) */
+        rijndaelEncrypt( M, M );                 /*  flag M_* and encrypt it  */
     }
 
-    MAC( A, sizeof A, M, &rijndaelEncrypt, M );  /*  CBC-MAC start of ADATA   */
-    if (aDataLen > s)                            /*  CBC-MAC rest of adata    */
+    xMac( A, sizeof A, M, &rijndaelEncrypt, M ); /*  CBC-MAC start of aData   */
+    if (aDataLen > s)                            /*  CBC-MAC rest of aData    */
     {
-        MAC( (char const*) aData + s, aDataLen - s, M, &rijndaelEncrypt, M );
+        xMac( (char const*) aData + s, aDataLen - s, M, &rijndaelEncrypt, M );
     }
-    MAC( pntxt, ptextLen, M, &rijndaelEncrypt, M );
+    xMac( pntxt, ptextLen, M, &rijndaelEncrypt, M );
 }
 
 /**
@@ -1375,7 +1363,7 @@ static void S2V( const uint8_t* key,
  * @param   ptextLen  size of plaintext in bytes
  * @param   aData     additional authentication data
  * @param   aDataLen  size of additional authentication data
- * @param   iv        synthesized I.V block, naturally prepended to ciphertext
+ * @param   iv        synthesized I.V block, typically prepended to ciphertext
  * @param   crtxt     resulting cipher-text buffer
  */
 void AES_SIV_encrypt( const uint8_t* keys,
@@ -1442,9 +1430,9 @@ static void Polyval( const block_t H, const void* aData, const void* pntxt,
     putValueL( buf, 0, aDataLen * 8 );
     putValueL( buf, 8, ptextLen * 8 );
 
-    MAC( aData, aDataLen, H, &dotGF128, pv );    /*  first digest AAD, then   */
-    MAC( pntxt, ptextLen, H, &dotGF128, pv );    /*  ..plaintext, and then    */
-    MAC( buf, sizeof buf, H, &dotGF128, pv );    /*  ..bit sizes into POLYVAL */
+    xMac( aData, aDataLen, H, &dotGF128, pv );   /*  first digest AAD, then   */
+    xMac( pntxt, ptextLen, H, &dotGF128, pv );   /*  ..plaintext, and then    */
+    xMac( buf, sizeof buf, H, &dotGF128, pv );   /*  ..bit sizes into POLYVAL */
 }
 
 /** derive the pair of authentication-encryption-keys from main key and nonce */
@@ -1569,11 +1557,11 @@ static void OMac( const uint8_t t, const block_t D, const block_t Q,
 /**
  * @brief   encrypt the input plaintext using EAX-AES block-cipher method
  * @param   key       encryption key with a fixed size specified by KEYSIZE
- * @param   nonce     a.k.a init-vector with EAX_NONCE_LEN bytes if not EAX'
+ * @param   nonce     a.k.a init-vector with EAX_NONCE_LEN bytes unless EAX'
  * @param   pntxt     input plain-text buffer
  * @param   ptextLen  size of plaintext in bytes
  * @param   nonceLen  size of the nonce byte array; should be non-zero in EAX'
- * @param   aData     additional authentication data
+ * @param   aData     additional authentication data; for EAX only, not EAX'
  * @param   aDataLen  size of additional authentication data
  * @param   crtxt     resulting cipher-text buffer; 4 bytes mac appended in EAX'
  * @param   auTag     authentication tag; buffer must be 16 bytes long in EAX
@@ -1599,8 +1587,8 @@ void AES_EAX_encrypt( const uint8_t* key, const uint8_t* nonce,
     mac[12] &= 0x7F;
     mac[14] &= 0x7F;                             /*  clear 2 bits to get N'   */
     CTR_Cipher( mac, 1, pntxt, ptextLen, crtxt );
-    OMac( 2, D, Q, crtxt, ptextLen, mac );       /*  C' = CMAC'( ciphertext ) */
 
+    OMac( 2, D, Q, crtxt, ptextLen, mac );       /*  C' = CMAC'( ciphertext ) */
     *(int32_t*) &crtxt[ptextLen] ^= *(int32_t*) &mac[12];
 #else
     OMac( 1, D, Q, aData, aDataLen, auTag );     /*  H = OMAC(1; adata)       */
@@ -1616,11 +1604,11 @@ void AES_EAX_encrypt( const uint8_t* key, const uint8_t* nonce,
 /**
  * @brief   decrypt the input ciphertext using EAX-AES block-cipher method
  * @param   key       decryption key with a fixed size specified by KEYSIZE
- * @param   nonce     a.k.a init-vector with EAX_NONCE_LEN bytes if not EAX'
+ * @param   nonce     a.k.a init-vector with EAX_NONCE_LEN bytes unless EAX'
  * @param   crtxt     input cipher-text buffer + appended authentication tag
  * @param   crtxtLen  size of cipher-text; excluding tag / 4-bytes mac in EAX'
  * @param   nonceLen  size of the nonce byte array; should be non-zero in EAX'
- * @param   aData     additional authentication data; ignored in EAX'
+ * @param   aData     additional authentication data; for EAX only, not EAX'
  * @param   aDataLen  size of additional authentication data
  * @param   tagLen    length of authentication tag; mandatory 4 bytes in EAX'
  * @param   pntxt     resulting plaintext buffer
@@ -1692,7 +1680,7 @@ static void OffsetB( const block_t Ld, const count_t index, block_t delta )
 
 /**
  * @brief   encrypt or decrypt a data unit using OCB-AES method
- * @param   nonce     a.k.a init-vector with a fixed size of 12 bytes
+ * @param   nonce     a.k.a initialization vector with fixed size: OCB_NONCE_LEN
  * @param   cipher    block-cipher function: rijndaelEncrypt or rijndaelDecrypt
  * @param   input     input plain/cipher-text buffer
  * @param   dataSize  size of data
@@ -1706,8 +1694,8 @@ static void OCB_Cipher( const uint8_t* nonce, fmix_t cipher,
                         block_t Ls, block_t Ld, block_t Del, void* output )
 {
     uint8_t kt[2 * BLOCKSIZE] = { OCB_TAG_LEN << 4 & 0xFF };
-    count_t i, n = nonce[OCB_NONCE_LEN - 1] & 0x3F;
-    uint8_t *y = output, r = n % 8;
+    count_t n = nonce[OCB_NONCE_LEN - 1] & 0x3F, i;
+    uint8_t r = n % 8, *y = output;
 
     memcpy( output, input, dataSize );           /* copy input data to output */
 
@@ -1762,7 +1750,7 @@ static void OCB_GetTag( const block_t Ds,
     uint8_t const r = aDataLen % BLOCKSIZE, *x = aData;
     count_t i, n = aDataLen / BLOCKSIZE;
     block_t S = { 0 };                           /*  checksum, i.e.           */
-    MAC( pntxt, ptextLen, NULL, &nop, S );       /*  ..xor of all plaintext   */
+    xMac( pntxt, ptextLen, NULL, &nop, S );      /*  ..xor of all plaintext   */
 
     xorBlock( Ds, S );
     xorBlock( Ld, S );
@@ -1782,7 +1770,7 @@ static void OCB_GetTag( const block_t Ds,
     {
         OffsetB( Ld, n, S );                     /*  S = calculated Δ_n       */
         S[r] ^= 0x80;                            /*  A_* = A || 1  (padded)   */
-        xorThenMix( x, r, Ls, &xorBlock, S );    /*  S_* = A_* ^ L_* ^ Δ_n    */
+        xMac( x, r, Ls, &xorBlock, S );          /*  S_* = A_* ^ L_* ^ Δ_n    */
         rijndaelEncrypt( S, S );
         xorBlock( S, tag );                      /*  Tag = Enc(S_*) ^ Tag_n   */
     }
@@ -1794,7 +1782,7 @@ static void OCB_GetTag( const block_t Ds,
 /**
  * @brief   encrypt the input stream using OCB-AES block-cipher method
  * @param   key       encryption key with a fixed size specified by KEYSIZE
- * @param   nonce     a.k.a init-vector with a fixed size of 12 bytes
+ * @param   nonce     a.k.a initialization vector with fixed size: OCB_NONCE_LEN
  * @param   pntxt     input plain-text buffer
  * @param   ptextLen  size of plaintext in bytes
  * @param   aData     additional authentication data
@@ -1817,7 +1805,7 @@ void AES_OCB_encrypt( const uint8_t* key, const uint8_t* nonce,
 /**
  * @brief   decrypt the input stream using OCB-AES block-cipher method
  * @param   key       decryption key with a fixed size specified by KEYSIZE
- * @param   nonce     a.k.a init-vector with a fixed size of 12 bytes
+ * @param   nonce     a.k.a initialization vector with fixed size: OCB_NONCE_LEN
  * @param   crtxt     input cipher-text buffer + appended authentication tag
  * @param   crtxtLen  size of ciphertext, excluding tag
  * @param   aData     additional authentication data
@@ -1860,7 +1848,7 @@ char AES_OCB_decrypt( const uint8_t* key, const uint8_t* nonce,
  * @param   secret    input plain text secret
  * @param   secretLen size of input, must be a multiple of HB (half-block size)
  * @param   wrapped   wrapped secret. note: size of output = secretLen + HB
- * @return            error if # of half-blocks is less than 2 or needs padding
+ * @return            error if size is not a multiple of HB, or size < BLOCKSIZE
  */
 char AES_KEY_wrap( const uint8_t* kek,
                    const uint8_t* secret, const size_t secretLen, uint8_t* wrapped )
@@ -1917,9 +1905,9 @@ char AES_KEY_unwrap( const uint8_t* kek,
         {
             r -= HB;
             xorWith( A, HB - 1, n * i + j );
-            memcpy( A + HB, r, HB );             /*  C = Dec(A ^ t | R[j])    */
-            rijndaelDecrypt( A, A );             /*  A = MSB(64, C)           */
-            memcpy( r, A + HB, HB );             /*  R[j] = LSB(64, C)        */
+            memcpy( A + HB, r, HB );             /*  D = Dec(A ^ t | R[j])    */
+            rijndaelDecrypt( A, A );             /*  A = MSB(64, D)           */
+            memcpy( r, A + HB, HB );             /*  R[j] = LSB(64, D)        */
         }
     }
     while (++i != HB)  j |= A[i] ^ 0xA6;         /*  authenticate/error check */
@@ -1939,22 +1927,20 @@ char AES_KEY_unwrap( const uint8_t* kek,
 /** derive modulo(2^130-5) for a little endian block, by repeated subtraction */
 static void modLPoly( uint8_t* block, const uint8_t ovrfl )
 {
-    int i = BLOCKSIZE, n = 0x40 * ovrfl + block[Sp - 1] / 4;
-    int32_t q = n - (block[Sp - 1] < 3);
-    while (q == 0 && --i)                        /* n = B / (2 ^ 130)         */
-    {                                            /* compare block to 2^130-5  */
-        q -= 0xFF - block[i];                    /* proceed if B >= (2^130-5) */
-    }
-    n += (i == 0 && block[0] >= 0xFB);
+    uint8_t i = BLOCKSIZE, *msb = block + i;
+    int n = ovrfl * 0x40 + *msb / 4;             /* n = B / (2 ^ 130)         */
+    int32_t q = n + *msb == 3 && *block >= 0xFB;
 
-    for ( ; n != 0; n = block[Sp - 1] > 3)       /* mod = B - n * (2^130-5)   */
+    while (q && --i)  q = block[i] == 0xFF;      /* compare block to 2^130-5  */
+
+    for (n += q; n; n = *msb > 3)                /* mod = B - n * (2^130-5)   */
     {
         for (q = 5 * n, i = 0; q && i < Sp; q >>= 8)
         {
             q += block[i];                       /* to get mod, first derive  */
             block[i++] = (uint8_t) q;            /* .. B + (5 * n) and then   */
         }                                        /* .. subtract n * (2^130)   */
-        block[Sp - 1] -= 4 * (uint8_t) n;
+        *msb -= 4 * (uint8_t) n;
     }
 }
 
@@ -1985,18 +1971,17 @@ static void shiftLBlock( uint8_t* block, const uint8_t shl )
 /** modular multiplication of two little-endian poly1305 blocks. y *= x mod P */
 static void mulLBlocks( const uint8_t* x, uint8_t* y )
 {
-    uint8_t i, b, t, nz, result[Sp] = { 0 };
+    uint8_t i, b, nz, result[Sp] = { 0 };
 
-    for (i = 0; i < Sp; ++i)
+    for (i = Sp; i--; ++x)
     {
-        for (t = x[i], b = 1; b != 0; )          /*  check every bit of x[i]  */
+        for (b = nz = 1; b != 0; nz = 1)         /*  check every bit of x[i]  */
         {                                        /*  ..and if any bit was set */
-            if (t & b)                           /*  ..add y to the result.   */
+            if (*x & b)                          /*  ..add y to the result.   */
             {                                    /*  then, calculate the      */
                 addLBlocks( y, Sp, result );     /*  ..distance to the next   */
-                t ^= b;                          /*  ..set bit, i.e. nz       */
-            }
-            for (nz = 0; !(t & b) && b; ++nz)  b <<= 1;
+            }                                    /*  ..set bit, i.e. nz       */
+            for (b <<= 1; (*x & b) < b; b <<= 1)  ++nz;
             shiftLBlock( y, nz );
         }
     }
@@ -2014,27 +1999,26 @@ static void mulLBlocks( const uint8_t* x, uint8_t* y )
 void AES_Poly1305( const uint8_t* keys, const block_t nonce,
                    const void* data, const size_t dataSize, block_t mac )
 {
-    uint8_t r[Sp], poly[Sp] = { 0 }, c[Sp] = { 0 }, rn[Sp] = { 1 };
-    uint8_t i = (dataSize > 0);
-    uint8_t m = (dataSize - i) % BLOCKSIZE + i;
-    count_t q = (dataSize - i) / BLOCKSIZE + i;
-    uint8_t const* x = (uint8_t const*) data;
+    uint8_t r[Sp], poly[Sp] = { 0 }, c[Sp] = { 0 }, rk[Sp] = { 1 };
+    uint8_t s = (dataSize > 0), i;
+    uint8_t j = (dataSize - s) % BLOCKSIZE + s;
+    count_t q = (dataSize - s) / BLOCKSIZE;
+    uint8_t const* ptr = (uint8_t const*) data + q * BLOCKSIZE;
 
     memcpy( r, keys + KEYSIZE, BLOCKSIZE );      /* extract r from (k,r) pair */
-    for (i = 3; i < BLOCKSIZE; ++i)
+    for (r[i = BLOCKSIZE] = 0; i; i -= 4)
     {
-        if (i % 4 == 0)  r[i] &= 0xFC;           /* clear bottom 2 bits       */
-        if (i % 4 == 3)  r[i] &= 0x0F;           /* clear top 4 bits          */
+        r[i] &= 0xFC;                            /* clear bottom 2 bits       */
+        r[i - 1] &= 0x0F;                        /* clear top 4 bits          */
     }
-    r[i] = 0;
-    while (q--)
+
+    for (q += s; q--; ptr -= (j = BLOCKSIZE))
     {
-        memcpy( c, x + q * BLOCKSIZE, m );       /* copy message to chunk     */
-        c[m] = 1;                                /* append 1 to each chunk    */
-        mulLBlocks( r, rn );                     /* r^n = r^{n-1} * r         */
-        mulLBlocks( rn, c );                     /* calculate c_{q-n} * r^n   */
+        memcpy( c, ptr, j );                     /* copy message to chunk     */
+        c[j] = 1;                                /* append 1 to each chunk    */
+        mulLBlocks( r, rk );                     /* r^k = r^{k-1} * r         */
+        mulLBlocks( rk, c );                     /* calculate c_{q-k} * r^k   */
         addLBlocks( c, sizeof c, poly );         /* add to poly (mod 2^130-5) */
-        m = BLOCKSIZE;
     }
 
     AES_SetKey( keys );
@@ -2093,7 +2077,7 @@ static void strRadix( const uint8_t* num, uint8_t bytes, rbase_t* s, uint8_t len
     {
         for (b = num[bytes], i = 0; i < len; b /= RADIX)
         {
-            b += s[i] << 8;                      /*  num = num << 8 + b       */
+            b += s[i] << 8;                      /*  numstr = numstr << 8 + b */
             s[i++] = b % RADIX;
         }
     }
@@ -2121,48 +2105,48 @@ static void numstrSub( const rbase_t* q, const uint8_t N, rbase_t* p )
     }
 }
 
-/** apply the FF3-1 round at step i to the input string X with length `len`   */
+/** apply the FF3-1 round at step `i` to the input string X with length `len` */
 static void FF3round( const uint8_t i, const uint8_t* T, const uint8_t u,
-                      const uint8_t len, rbase_t* Xe )
+                      const uint8_t len, rbase_t* X )
 {
-    uint8_t P[BLOCKSIZE], t = len - (~i & 1) * u;
+    uint8_t P[BLOCKSIZE], s = i & 1 ? len : len - u;
 
-    T += (~i & 1) * 4;                           /* W=TL if i is odd, else TR */
+    T += (s < len) * 4;                          /* W=TL if i is odd, else TR */
     P[15] = T[0];  P[14] = T[1];
     P[13] = T[2];  P[12] = T[3] ^ i;
 
-    numRadix( Xe - t, len - u, P, 12 );
+    numRadix( X - s, len - u, P, 12 );           /*  B = *X_end - s           */
     rijndaelEncrypt( P, P );
-    strRadix( P, sizeof P, Xe, u );              /* C = REV( STRm(c) )        */
+    strRadix( P, sizeof P, X, u );               /*  C = *X = REV( STRm(c) )  */
 }
 
 /** encrypt/decrypt a base-RADIX string X with size len using FF3-1 algorithm */
 static void FF3_Cipher( const char mode, const uint8_t* key,
                         const uint8_t len, const uint8_t* tweak, rbase_t* X )
 {
-    uint8_t u = (len + mode) >> 1, r = mode ? 0 : 8, i, *k;
-    uint8_t T[8];
+    rbase_t *Xc = X + len;
+    uint8_t T[8], i, *k = (void*) Xc, u = (len + mode) / 2, r = mode ? 0 : 8;
+
     memcpy( T, tweak, 7 );
     T[7] = T[3] << 4 & 0xF0;
     T[3] &= 0xF0;
-    X += len;                                    /* go to end of the input    */
 
     /* note that the official test vectors are based on the old version of FF3,
      * which uses a 64-bit tweak. you can uncomment this line to verify them:
     memcpy( T, tweak, 8 );                                                    */
 
-    for (i = KEYSIZE, k = (void*) X; i; )  k[--i] = *key++;
-    AES_SetKey( k );                             /*           reversed key    */
+    for (i = KEYSIZE; i--; )  k[i] = *key++;
+    AES_SetKey( k );                             /*  key is reversed          */
 
-    for (i = r; i < 8; ++i, u = len - u)         /*      Feistel procedure    */
+    for (i = r; i < 8; u = len - u)              /*  Feistel procedure        */
     {
-        FF3round( i, T, u, len, X );             /*      encryption rounds    */
-        numstrAdd( X, u, X - (i & 1 ? u : len) );
+        FF3round( i++, T, u, len, Xc );          /*  encryption rounds        */
+        numstrAdd( Xc, u, i & 1 ? X : Xc - u );
     }
-    for (i = r; i--; u = len - u)
+    for (i = r; i > 0; u = len - u)              /*  A = *X,  B = *(Xc - u)   */
     {
-        FF3round( i, T, u, len, X );             /*      decryption rounds    */
-        numstrSub( X, u, X - (i & 1 ? u : len) );
+        FF3round( --i, T, u, len, Xc );          /*  decryption rounds        */
+        numstrSub( Xc, u, i & 1 ? Xc - u : X );
     }
 }
 #else /* FF1: */
@@ -2172,9 +2156,9 @@ static void numRadix( const rbase_t* s, size_t len, uint8_t* num, size_t bytes )
 {
     size_t i, d;
     memset( num, 0, bytes );
-    for ( ; len--; ++s)
+    while (len--)
     {
-        for (d = *s, i = bytes; i; d >>= 8)
+        for (d = *s++, i = bytes; i; d >>= 8)
         {
             d += num[--i] * RADIX;               /*  num = num * RADIX + d    */
             num[i] = (uint8_t) d;
@@ -2187,11 +2171,11 @@ static void strRadix( const uint8_t* num, size_t bytes, rbase_t* s, size_t len )
 {
     size_t i, b;
     memset( s, 0, sizeof (rbase_t) * len );
-    for ( ; bytes--; ++num)
+    while (bytes--)
     {
-        for (b = *num, i = len; i; b /= RADIX)
+        for (b = *num++, i = len; i; b /= RADIX)
         {
-            b += s[--i] << 8;                    /*  num = num << 8 + b       */
+            b += s[--i] << 8;                    /*  numstr = numstr << 8 + b */
             s[i] = b % RADIX;
         }
     }
@@ -2201,7 +2185,7 @@ static void strRadix( const uint8_t* num, size_t bytes, rbase_t* s, size_t len )
 static void numstrAdd( const rbase_t* q, size_t N, rbase_t* p )
 {
     size_t a, c;
-    for (c = 0; N--; c = a >= RADIX)
+    for (c = 0; N--; c = a >= RADIX)             /*  big-endian addition      */
     {
         a = p[N] + q[N] + c;
         p[N] = a % RADIX;
@@ -2212,75 +2196,74 @@ static void numstrAdd( const rbase_t* q, size_t N, rbase_t* p )
 static void numstrSub( const rbase_t* q, size_t N, rbase_t* p )
 {
     size_t s, c;
-    for (c = 0; N--; c = s < RADIX)
+    for (c = 0; N--; c = s < RADIX)              /*  big-endian subtraction   */
     {
         s = RADIX + p[N] - q[N] - c;
         p[N] = s % RADIX;
     }
 }
 
-static size_t bf1, df1;                          /*  b and d constants in FF1 */
+static size_t bf, df;                            /*  b and d constants in FF1 */
 
-/** apply the FF1 round at step i to the input string X with length `len`     */
+/** apply the FF1 round at step `i` to the input string X with length `len`   */
 static void FF1round( const uint8_t i, const block_t P, const size_t u,
-                      const size_t len, rbase_t* Xe )
+                      const size_t len, rbase_t* Xc )
 {
-    size_t t = len - (~i & 1) * u;
+    size_t j = bf % BLOCKSIZE, s = i & 1 ? len : len - u;
     block_t R = { 0 };
-    uint8_t *num = (void*) &Xe[(len + 1) / 2];   /*  use pre-allocated memory */
+    uint8_t *num = (void*) (Xc + u);             /* use pre-allocated memory  */
 
-    numRadix( Xe - t, len - u, num, bf1 );       /*  get NUM_radix(B)         */
-    t = bf1 % BLOCKSIZE;
-    R[LAST - t] = i;
-    memcpy( R + BLOCKSIZE - t, num, t );         /* feed NUMradix(B) into PRF */
-    MAC( P, BLOCKSIZE, R, &rijndaelEncrypt, R );
-    MAC( num + t, bf1 - t, R, &rijndaelEncrypt, R );
+    R[LAST - j] = i;
+    numRadix( Xc - s, len - u, num, bf );        /* get NUM_radix(B)          */
+    memcpy( R + BLOCKSIZE - j, num, j );         /* feed NUMradix(B) into PRF */
+    xMac( P, BLOCKSIZE, R, &rijndaelEncrypt, R );
+    xMac( num + j, bf - j, R, &rijndaelEncrypt, R );
 
-    t = (df1 - 1) / BLOCKSIZE;
-    memcpy( num, R, sizeof R );                  /* R = PRF(P || Q)           */
-    for (num += t * BLOCKSIZE; t; num -= BLOCKSIZE)
+    j = (df - 1) / BLOCKSIZE;                    /* R = PRF(P || Q)           */
+    memcpy( num, R, sizeof R );
+    for (num += j * sizeof R; j; num -= sizeof R)
     {
         memcpy( num, R, sizeof R );
-        xorWith( num, LAST, t-- );               /* num = R || R ^ [i] ||...  */
-        rijndaelEncrypt( num, num );             /* S = R || Enc(R ^ [i])...  */
+        xorWith( num, LAST, j-- );               /* num = R || R ^ [j] ||...  */
+        rijndaelEncrypt( num, num );             /* S = R || Enc(R ^ [j])...  */
     }
-    strRadix( num, df1, Xe, u );                 /* take first d bytes of S   */
+    strRadix( num, df, Xc, u );                  /* take first d bytes of S   */
 }
 
 /** encrypt/decrypt a base-RADIX string X with length len using FF1 algorithm */
 static void FF1_Cipher( const char mode, const uint8_t* key, const size_t len,
                         const uint8_t* tweak, const size_t tweakLen, rbase_t* X )
 {
-    block_t P = { 1, 2, 1 };
+    block_t P = { 1, 2, 1, 0, 0, 0, 10 };
+    rbase_t *Xc = X + len;
     uint8_t i = tweakLen % BLOCKSIZE, r = mode ? 0 : 10;
     size_t u = (len + 1 - mode) >> 1, t = tweakLen - i;
 
-    X += len;                                    /* go to end of the input    */
-    putValueB( P, 5, RADIX );
-    putValueB( P, 7, (len / 2 & 0xFF) + 0xA00 );
+    P[7] = len / 2 & 0xFF;
+    putValueB( P, 5, RADIX );                    /* P = [1,2,1][radix][10]... */
     putValueB( P, 11, len );
-    putValueB( P, 15, tweakLen );                /* P=[1][2][1][radix][10]... */
+    putValueB( P, 15, tweakLen );
 
     AES_SetKey( key );
     rijndaelEncrypt( P, P );
-    MAC( tweak, t, P, &rijndaelEncrypt, P );     /* P = PRF(P || tweak)       */
-    if (i < BLOCKSIZE - bf1 % BLOCKSIZE)
+    xMac( tweak, t, P, &rijndaelEncrypt, P );    /* P = PRF(P || tweak)       */
+    if (i < BLOCKSIZE - bf % BLOCKSIZE)
     {
         for (t = tweakLen; i; )  P[--i] ^= tweak[--t];
     }
     else                                         /* zero pad and feed to PRF  */
     {
-        xorThenMix( &tweak[t], i, P, &rijndaelEncrypt, P );
+        xMac( &tweak[t], i, P, &rijndaelEncrypt, P );
     }
-    for (i = r; i < 10; ++i, u = len - u)
+    for (i = r; i < 10; u = len - u)             /* A = *X,  B = *(Xc - u)    */
     {
-        FF1round( i, P, u, len, X );             /* encryption rounds         */
-        numstrAdd( X, u, X - (i & 1 ? u : len) );
+        FF1round( i++, P, u, len, Xc );          /* encryption rounds         */
+        numstrAdd( Xc, u, i & 1 ? X : Xc - u );
     }
-    for (i = r; i--; u = len - u)
+    for (i = r; i != 0; u = len - u)
     {
-        FF1round( i, P, u, len, X );             /* decryption rounds         */
-        numstrSub( X, u, X - (i & 1 ? u : len) );
+        FF1round( --i, P, u, len, Xc );          /* decryption rounds         */
+        numstrSub( Xc, u, i & 1 ? Xc - u : X );
     }
 }
 #endif /* FF_X */
@@ -2301,19 +2284,19 @@ static char FPEsetup( const string_t str, const size_t len, rbase_t** indices )
     if (len > MAXLEN)  return 'L';
     i *= sizeof (rbase_t);
     j += (i < KEYSIZE) * (KEYSIZE - i);
-#else                                            /*  extra memory is required */
-    bf1 = (size_t) (LOGRDX * i + 8 - 1e-10) >> 3;
-    df1 = (bf1 + 7) & ~3UL;                      /*  ..whose size is at least */
-    j += (df1 + LAST) & ~LAST;                   /*  ..ceil( d/16 ) blocks    */
+#else
+    bf = (size_t) (LOGRDX * i + 8 - 1e-10) / 8;  /*  extra memory is required */
+    df = (bf + 7) & ~3UL;                        /*  ..whose size is at least */
+    j += (df + 12) & ~15UL;                      /*  ..ceil( d/16 ) blocks    */
 #endif
     if (len < MINLEN || (*indices = malloc( j )) == NULL)
     {
         return 'M';                              /*  memory allocation failed */
     }
-    for (i = 0; i < len; ++i, ++str)
+    for (i = 0; i < len; ++i)
     {
         for (j = RADIX; --j && alpha[j] != *str; ) {}
-        if (*str != alpha[j])
+        if (alpha[j] != *str++)
         {
             free( *indices );                    /*  invalid character found  */
             return 'I';
@@ -2328,6 +2311,7 @@ static void FPEfinalize( const rbase_t* index, size_t len, void** output )
 {
     string_t alpha = ALPHABET, *s = *output;
     while (len--)  *s++ = alpha[*index++];
+    *s = 0;
 }
 
 /**

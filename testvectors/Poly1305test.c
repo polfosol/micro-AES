@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : Poly1305test.c
  Author      : polfosol
- Version     : 1.1.0.0
+ Version     : 1.1.1.0
  Copyright   : copyright © 2022 - polfosol
  Description : illustrating how the test vectors of Poly1305-AES are processed
  ==============================================================================
@@ -39,9 +39,9 @@ static void bytes2str(const uint8_t* bytes, char* str, size_t len)
 
 static int ciphertest(uint8_t* key, uint8_t* nnc, uint8_t* d, uint8_t* m, size_t ds, char* r)
 {
-    char sk[2*AES_KEY_LENGTH + 40], smac[40], msg[30];
+    char sk[2*AES_KEY_LENGTH + 33], smac[33], msg[30];
     uint8_t tmp[32], t = 0;
-    sprintf(msg, "%s", "success");
+    sprintf(msg, "%s", "passed the test");
 
     AES_Poly1305(key, nnc, d, ds, tmp);
     t = memcmp(m, tmp, 16);

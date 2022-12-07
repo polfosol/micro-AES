@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : XTStest.c
  Author      : polfosol
- Version     : 2.3.0.0
+ Version     : 2.3.1.0
  Copyright   : copyright © 2022 - polfosol
  Description : illustrating how to validate NIST's vectors for AES-XTS mode
  ==============================================================================
@@ -37,11 +37,11 @@ static void bytes2str(const uint8_t* bytes, char* str, size_t len)
     str[j] = 0;
 }
 
-static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* c, uint8_t n, char* r)
+static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* c, size_t n, char* r)
 {
-    char sk[4*AES_KEY_LENGTH + 16], si[40], sp[0x80], sc[0x80], msg[30];
+    char sk[4*AES_KEY_LENGTH + 1], si[33], sp[0x80], sc[0x80], msg[30];
     uint8_t tmp[0x80], t = 0;
-    sprintf(msg, "%s", "success");
+    sprintf(msg, "%s", "passed the test");
 
     AES_XTS_encrypt(key, iv, p, n, tmp);
     if (memcmp(c, tmp, n))
@@ -131,7 +131,7 @@ int main()
         }
     }
     printf ("test cases: %d\nsuccessful: %d\nfailed encrypt: %d, failed decrypt: %d\n",
-        pass + ef + df, pass, ef, df);
+        pass + (ef > df ? ef : df), pass, ef, df);
 
     fclose(fp); fclose(fs); fclose(ferr);
     if (ef + df == 0)

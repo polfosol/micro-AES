@@ -1,16 +1,16 @@
 # µAES
 
-**A minimalist ANSI-C compatible code for most of the AES-related algorithms**.
+**A minimalist ANSI-C compatible code for the AES encryption and block cipher modes**.
 
-[![GitHub release](https://img.shields.io/static/v1?message=%C2%B5AES&logo=github&labelColor=gray&color=blue&logoColor=white&label=%20)](https://github.com/polfosol/micro-AES) ![C](https://img.shields.io/badge/langauge-C-blue.svg) [![Build Status](https://img.shields.io/badge/v1.3.0-blue)](https://github.com/polfosol/micro-AES/files/10168732/micro_aes-v1.3.0.zip) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![GitHub release](https://img.shields.io/static/v1?message=%C2%B5AES&logo=github&labelColor=gray&color=blue&logoColor=white&label=%20)](https://github.com/polfosol/micro-AES) ![C](https://img.shields.io/badge/langauge-C-blue.svg) [![Build Status](https://img.shields.io/badge/v1.5.2-blue)](https://github.com/polfosol/micro-AES/files/10227613/micro_aes-v1.5.2.zip) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-This library is a highly flexible and portable implementation of different AES encryption schemes and block cipher modes.
+This library is a highly flexible and portable implementation of most of the AES related algorithms.
 
 ## Features
 
 * $\textrm{\textbf{Comprehensive}}$ — supports all standard AES key sizes (128, 192 and 256 bits) along with almost every block-cipher mode.
 
-  All popular (and some unpopular) block ciphering modes of the AES are implemented in this library, such as [**_ECB_**, **_CBC_**, **_CFB_**, **_OFB_**, **_CTR_**](https://csrc.nist.gov/publications/detail/sp/800-38a/final), [**_GCM_**](https://csrc.nist.gov/publications/detail/sp/800-38d/final), [**_CCM_**](https://csrc.nist.gov/publications/detail/sp/800-38c/final), [**_XTS_**](https://csrc.nist.gov/publications/detail/sp/800-38e/final), [**_OCB_**](https://www.rfc-editor.org/rfc/rfc7253.html), [**_EAX_**](https://en.wikipedia.org/wiki/EAX_mode), [**_KW_** (_KWA_)](https://csrc.nist.gov/publications/detail/sp/800-38f/final), [**_SIV_**](https://www.rfc-editor.org/rfc/rfc5297.html), [**_GCM-SIV_**](https://www.rfc-editor.org/rfc/rfc8452.html), [**_FPE_** (_FF1 & FF3-1_)](https://csrc.nist.gov/publications/detail/sp/800-38g/final), and furthermore, authentication APIs for [**_CMAC_**](https://csrc.nist.gov/publications/detail/sp/800-38b/final) and [**_Poly1305-AES_**](https://cr.yp.to/mac.html).
+  All popular (and some unpopular) block ciphering modes of the AES are implemented in this library, such as [**_ECB_**, **_CBC_**, **_CFB_**, **_OFB_**, **_CTR_**](https://csrc.nist.gov/publications/detail/sp/800-38a/final), [**_GCM_**](https://csrc.nist.gov/publications/detail/sp/800-38d/final), [**_CCM_**](https://csrc.nist.gov/publications/detail/sp/800-38c/final), [**_XTS_**](https://csrc.nist.gov/publications/detail/sp/800-38e/final), [**_KW_** (_KWA_)](https://csrc.nist.gov/publications/detail/sp/800-38f/final), [**_OCB_**](https://www.rfc-editor.org/rfc/rfc7253.html), [**_EAX_** / **_EAX'_**](https://en.wikipedia.org/wiki/EAX_mode), [**_SIV_**](https://www.rfc-editor.org/rfc/rfc5297.html), [**_GCM-SIV_**](https://www.rfc-editor.org/rfc/rfc8452.html), [**_FPE_** (**_FF1_** / **_FF3-1_**)](https://csrc.nist.gov/publications/detail/sp/800-38g/final), and furthermore, authentication APIs for [**_CMAC_**](https://csrc.nist.gov/publications/detail/sp/800-38b/final) and [**_Poly1305-AES_**](https://cr.yp.to/mac.html).
 
 * $\textrm{\textbf{All in one}}$ — the whole implementation code is in a single C file with no external dependencies.
 
@@ -34,7 +34,7 @@ This library is a highly flexible and portable implementation of different AES e
   tcc -o micro_aes.exe  main.o micro_aes.o
   ```
 ## Examples
-See the `main.c` file which has some example codes illustrating how to use the API functions, along with test vectors.
+See the `main.c` file which has some example codes illustrating how to use the API functions, along with test vectors. Also check out the `/testvectors` directory.
 
 ## Remarks
 

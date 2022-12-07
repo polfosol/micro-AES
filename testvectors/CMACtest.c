@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : CMACtest.c
  Author      : polfosol
- Version     : 1.5.0.0
+ Version     : 1.5.1.0
  Copyright   : copyright © 2022 - polfosol
  Description : illustrating how to validate NIST's vectors for AES-CMAC
  ==============================================================================
@@ -39,9 +39,9 @@ static void bytes2str(const uint8_t* bytes, char* str, size_t len)
 
 static int ciphertest(uint8_t* key, uint8_t* d, uint8_t* m, size_t ds, size_t ms, char* r)
 {
-    char sk[2*AES_KEY_LENGTH + 8], smac[40], msg[30];
+    char sk[2*AES_KEY_LENGTH + 1], smac[33], msg[30];
     uint8_t tmp[32], t = 0;
-    sprintf(msg, "%s", "success");
+    sprintf(msg, "%s", "passed the test");
 
     AES_CMAC(key, d, ds, tmp);
     t = memcmp(m, tmp, ms);

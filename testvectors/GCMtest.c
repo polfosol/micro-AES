@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : GCMtest.c
  Author      : polfosol
- Version     : 2.0.0.0
+ Version     : 2.0.1.0
  Copyright   : copyright © 2022 - polfosol
  Description : illustrating how to validate NIST's vectors for AES-GCM mode
  ==============================================================================
@@ -38,11 +38,11 @@ static void bytes2str(const uint8_t* bytes, char* str, size_t len)
 }
 
 static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* a, uint8_t* c,
-                      uint8_t np, uint8_t na, uint8_t nt, char* r)
+                      size_t np, size_t na, uint8_t nt, char* r)
 {
-    char sk[70], si[GCM_NONCE_LEN*2+6], sp[0x100], sc[0x100], sa[0x100], msg[30];
+    char sk[65], si[2*GCM_NONCE_LEN + 1], sp[0x100], sc[0x100], sa[0x100], msg[30];
     uint8_t tmp[0x80], t = 0;
-    sprintf(msg, "%s", "success");
+    sprintf(msg, "%s", "passed the test");
 
     AES_GCM_encrypt(key, iv, p, np, a, na, tmp, tmp + np);
     if (memcmp(c, tmp, np + nt))
@@ -145,7 +145,7 @@ int main()
         }
     } while (line != NULL);
     printf ("test cases: %d\nsuccessful: %d\nfailed encrypt: %d, failed decrypt: %d\n",
-        pass + ef + df, pass, ef, df);
+        pass + (ef > df ? ef : df), pass, ef, df);
 
     fclose(fp); fclose(fs); fclose(ferr);
     if (ef + df == 0)

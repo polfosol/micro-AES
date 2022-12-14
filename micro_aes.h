@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.h
  Author      : polfosol
- Version     : 9.9.6.0
+ Version     : 9.9.6.2
  Copyright   : copyright © 2022 - polfosol
  Description : μAES ™ is a minimalist all-in-one library for AES encryption
  ==============================================================================
@@ -38,7 +38,7 @@ AES block-cipher modes of operation. The following modes can be enabled/disabled
 #define CMAC         1     /* message authentication code (NIST SP 800-38B)   */
 
 #if CTR
-#define CCM          1     /* counter with CBC-MAC (RFC-3610 & SP 800-38C)    */
+#define CCM          1     /* counter with CBC-MAC (RFC-3610/NIST SP 800-38C) */
 #define GCM          1     /* Galois/counter mode with GMAC (NIST SP 800-38D) */
 #define EAX          1     /* encrypt-authenticate-translate (ANSI C12.22)    */
 #define SIV          1     /* synthetic initialization vector (RFC-5297)      */
@@ -80,7 +80,7 @@ Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
 #endif
 
 #if ECB || (CBC && !CTS) || (XEX && !XTS)
-#define AES_PADDING     0  /* other valid values:  (1) PKCS#7  (2) IEC7816-4  */
+#define AES_PADDING     0  /* standard values:  (1) PKCS#7  (2) IEC7816-4     */
 #endif
 
 #if FPE
@@ -103,7 +103,7 @@ Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
 #endif
 
 #if EAX && !EAXP
-#define EAX_NONCE_LEN  16  /* practically no limit; can be arbitrarily large  */
+#define EAX_NONCE_LEN  16  /* no specified limit; can be arbitrarily large    */
 #endif
 
 #if OCB
@@ -214,13 +214,13 @@ Main functions for XTS-AES block ciphering
  -----------------------------------------------------------------------------*/
 #if XTS
 char AES_XTS_encrypt( const uint8_t* keys,    /* encryption key pair          */
-                      const uint8_t* unitId,  /* tweak value (sector ID)      */
+                      const uint8_t* tweak,   /* tweak value (unit/sector ID) */
                       const uint8_t* pntxt,   /* plaintext buffer             */
                       const size_t ptextLen,  /* length of input plain text   */
                       uint8_t* crtxt );       /* cipher-text result           */
 
 char AES_XTS_decrypt( const uint8_t* keys,    /* decryption key pair          */
-                      const uint8_t* unitId,  /* tweak value (sector ID)      */
+                      const uint8_t* tweak,   /* tweak value (unit/sector ID) */
                       const uint8_t* crtxt,   /* cipher-text buffer           */
                       const size_t crtxtLen,  /* length of input cipher text  */
                       uint8_t* pntxt );       /* plaintext result             */
@@ -474,7 +474,7 @@ The error codes and key length should be defined here for external references:
 * In EBC/CBC/XEX modes, the size of input must be a multiple of block-size.
     Otherwise it needs to be padded. The simplest (default) padding mode is to
     fill the rest of block by zeros. Supported standard padding methods are
-    PKCS#7 and ISO/IEC 7816-4, which can be enabled by AES_PADDING macro.
+    PKCS#7 and ISO/IEC 7816-4, which can be enabled by the AES_PADDING macro.
 
 * In many texts, you may see that the words 'nonce' and 'initialization vector'
     are used interchangeably. But they have a subtle difference. Sometimes nonce
@@ -511,7 +511,7 @@ The error codes and key length should be defined here for external references:
 
 * The key wrapping mode is also denoted by KW. In this mode, the input secret is
     divided into 64bit blocks. Number of blocks is at least 2, and it is assumed
-    that no padding is required. For padding, the KWP mode is used which is
+    that no padding is required. For padding, the KWP mode must be used which is
     easily implementable, but left as an exercise! In the NIST document you may
     find some mentions of TKW which is for 3DES and irrelevant here. Anyway, the
     wrapped output has an additional block, i.e. wrappedSize = secretSize + 8.
@@ -526,8 +526,8 @@ The error codes and key length should be defined here for external references:
     Nonetheless, others might get a different result from them.
 
     The INCREASE_SECURITY macro, as its name suggests, is dealing with security
-    considerations. For example, since the RoundKey is declared as static array,
-    it might be exposed to some attacks. By enabling this macro, round-keys are
+    considerations. For example, since the RoundKey is declared as static array
+    it might get exposed to some attacks. By enabling this macro, round-keys are
     wiped out at the end of ciphering operations. However, please keep in mind
     that this is NOT A GUARANTEE against side-channel attacks.
 

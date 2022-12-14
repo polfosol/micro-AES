@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.c
  Author      : polfosol
- Version     : 9.9.6.6
+ Version     : 9.9.6.9
  Copyright   : copyright © 2022 - polfosol
  Description : ANSI-C compatible implementation of µAES ™ library.
  ==============================================================================
@@ -27,12 +27,14 @@
 #define SMALL_CIPHER      0  /* ... some explanations and the rationale of    */
 #define REDUCE_CODE_SIZE  1  /* ... these three macros                        */
 
-/** state_t represents rijndael state matrix. fixed-size memory blocks have an
- * essential role in all algorithms. so it may be a good aide for readability to
- * define a specific type and a function pointer that applies to these blocks */
+/** state_t represents rijndael state matrix. since fixed-size memory block have
+ * an essential role in all algorithms, it is represented by a specific type: */
 typedef uint8_t  state_t[Nb][4];
 typedef uint8_t  block_t[BLOCKSIZE];
-typedef void   (*fmix_t)(const block_t, block_t);
+
+/** these types are function pointers, whose arguments are fixed-size blocks: */
+typedef void  (*fdouble_t)(block_t);
+typedef void  (*fmix_t)(const block_t, block_t);
 
 #if SMALL_CIPHER
 typedef unsigned char count_t;
@@ -131,7 +133,7 @@ static uint8_t mulGF8( uint8_t x, uint8_t y )
 #endif
 
 #else
-#define xtime(x)   ((x & 0x80 ? 0x1b : 0x00) ^ (x << 1))
+#define xtime(y)   (y & 0x80 ? (y) << 1 ^ 0x1b : (y) << 1)
 
 #define mulGF8(x, y)                           \
      ( ((x      & 1) * y)                    ^ \
@@ -461,7 +463,7 @@ static char padBlock( const uint8_t len, block_t block )
     if (len == 0)  return 0;                     /*   default padding         */
     memset( block + len, 0, BLOCKSIZE - len );
 #endif
-    return 1;
+    return 'p';
 
 }
 #endif /* PADDING */
@@ -593,7 +595,7 @@ static void xMac( const void* data, const size_t dataSize,
         xorBlock( x, result );                   /* M_next = mix(seed, M ^ X) */
         mix( seed, result );
     }
-    if (n = dataSize % BLOCKSIZE)
+    if ((n = dataSize % BLOCKSIZE) != 0)
     {
         while (n--)  result[n] ^= x[n];
         mix( seed, result );
@@ -618,8 +620,6 @@ static void cMac( const block_t D, const block_t Q,
     xMac( data, dataSize - r, mac, &rijndaelEncrypt, mac );
     xMac( M, sizeof M, mac, &rijndaelEncrypt, mac );
 }
-
-typedef void (*fdouble_t)(block_t);              /* block-double function ptr */
 
 /** calculate key-dependent constants D and Q for CMAC, regarding endianness: */
 static void getSubkeys( const uint8_t* key, fdouble_t dou, block_t D, block_t Q )
@@ -742,14 +742,14 @@ char AES_CBC_encrypt( const uint8_t* key, const block_t iVec,
 #if CTS                                          /*  cipher-text stealing CS3 */
     if (r)
     {
-        y -= BLOCKSIZE;                          /*  or let  y = iv;          */
-        memcpy( y + BLOCKSIZE, y, r );           /*  'steal' the cipher-text  */
-        xorBlock( last, y );                     /*  ..to fill the last block */
+        iv = last;
+        memcpy( y, y - BLOCKSIZE, r );           /*  'steal' the cipher-text  */
+        y -= BLOCKSIZE;                          /*  ..to fill the last block */
 #else
     if (padBlock( r, y ))
     {
-        xorBlock( iv, y );
 #endif
+        xorBlock( iv, y );
         rijndaelEncrypt( y, y );
     }
     BURN( RoundKey );
@@ -831,6 +831,7 @@ static void CFB_Cipher( const uint8_t* key, const block_t iVec, const char mode,
         iv = mode ? y : x;                       /*  IV_next = Ciphertext     */
         y += BLOCKSIZE;
     }
+
     mixThenXor( iv, &rijndaelEncrypt, tmp, x, dataSize % BLOCKSIZE, y );
     BURN( RoundKey );
 }
@@ -1033,12 +1034,12 @@ static void XEX_Cipher( const uint8_t* keypair, fmix_t cipher,
 /**
  * @brief   encrypt the input plaintext using XTS-AES block-cipher method
  * @param   keys      two-part encryption key with a fixed size of 2*KEYSIZE
- * @param   twkId     tweak value of data unit, a.k.a sector ID (little-endian)
+ * @param   tweak     tweak bytes of data unit, a.k.a sector ID (little-endian)
  * @param   pntxt     input plaintext buffer
  * @param   ptextLen  size of plaintext in bytes
  * @param   crtxt     resulting cipher-text buffer
  */
-char AES_XTS_encrypt( const uint8_t* keys, const uint8_t* twkId,
+char AES_XTS_encrypt( const uint8_t* keys, const uint8_t* tweak,
                       const uint8_t* pntxt, const size_t ptextLen, uint8_t* crtxt )
 {
     block_t T = { 0 };
@@ -1048,7 +1049,7 @@ char AES_XTS_encrypt( const uint8_t* keys, const uint8_t* twkId,
     if (len == 0)  return ENCRYPTION_FAILURE;
     memcpy( crtxt, pntxt, len );                 /* copy input data to output */
 
-    XEX_Cipher( keys, &rijndaelEncrypt, len, ~0, twkId, T, crtxt );
+    XEX_Cipher( keys, &rijndaelEncrypt, len, ~0, tweak, T, crtxt );
     if (r)
     {                                            /*  XTS for partial block    */
         c = crtxt + len - BLOCKSIZE;
@@ -1058,7 +1059,6 @@ char AES_XTS_encrypt( const uint8_t* keys, const uint8_t* twkId,
         rijndaelEncrypt( c, c );
         xorBlock( T, c );
     }
-
     BURN( RoundKey );
     return ENDED_IN_SUCCESS;
 }
@@ -1066,12 +1066,12 @@ char AES_XTS_encrypt( const uint8_t* keys, const uint8_t* twkId,
 /**
  * @brief   encrypt the input ciphertext using XTS-AES block-cipher method
  * @param   keys      two-part encryption key with a fixed size of 2*KEYSIZE
- * @param   twkId     tweak value of data unit, a.k.a sector ID (little-endian)
+ * @param   tweak     tweak bytes of data unit, a.k.a sector ID (little-endian)
  * @param   crtxt     input ciphertext buffer
  * @param   crtxtLen  size of ciphertext in bytes
  * @param   pntxt     resulting plaintext buffer
  */
-char AES_XTS_decrypt( const uint8_t* keys, const uint8_t* twkId,
+char AES_XTS_decrypt( const uint8_t* keys, const uint8_t* tweak,
                       const uint8_t* crtxt, const size_t crtxtLen, uint8_t* pntxt )
 {
     block_t TT, T = { 0 };
@@ -1082,7 +1082,7 @@ char AES_XTS_decrypt( const uint8_t* keys, const uint8_t* twkId,
     memcpy( pntxt, crtxt, len );                 /* copy input data to output */
     p = pntxt + len - BLOCKSIZE;
 
-    XEX_Cipher( keys, &rijndaelDecrypt, len - BLOCKSIZE, ~0, twkId, T, pntxt );
+    XEX_Cipher( keys, &rijndaelDecrypt, len - BLOCKSIZE, ~0, tweak, T, pntxt );
     if (r)
     {
         memcpy( TT, T, sizeof T );
@@ -1542,7 +1542,7 @@ static void OMac( const uint8_t t, const block_t D, const block_t Q,
     block_t M = { 0 };
 #if EAXP
     memcpy( mac, t ? (dataSize ? Q : M) : D, sizeof M );
-    if (dataSize || !t)                          /*   ignore null ciphertext  */
+    if (dataSize == 0 && t)  return;             /*   ignore null ciphertext  */
 #else
     if (dataSize == 0)
     {
@@ -2056,11 +2056,11 @@ typedef uint8_t  rbase_t;
 /** convert a string in base-RADIX to a little-endian number, denoted by num  */
 static void numRadix( const rbase_t* s, uint8_t len, uint8_t* num, uint8_t bytes )
 {
-    size_t i, d;
     memset( num, 0, bytes );
     while (len--)
     {
-        for (d = s[len], i = 0; i < bytes; d >>= 8)
+        size_t i, d = s[len];
+        for (i = 0; i < bytes; d >>= 8)
         {
             d += num[i] * RADIX;                 /*  num = num * RADIX + d    */
             num[i++] = (uint8_t) d;
@@ -2071,11 +2071,11 @@ static void numRadix( const rbase_t* s, uint8_t len, uint8_t* num, uint8_t bytes
 /** convert a little-endian number to its base-RADIX representation string: s */
 static void strRadix( const uint8_t* num, uint8_t bytes, rbase_t* s, uint8_t len )
 {
-    size_t i, b;
     memset( s, 0, sizeof (rbase_t) * len );
     while (bytes--)
     {
-        for (b = num[bytes], i = 0; i < len; b /= RADIX)
+        size_t i, b = num[bytes];
+        for (i = 0; i < len; b /= RADIX)
         {
             b += s[i] << 8;                      /*  numstr = numstr << 8 + b */
             s[i++] = b % RADIX;
@@ -2086,8 +2086,8 @@ static void strRadix( const uint8_t* num, uint8_t bytes, rbase_t* s, uint8_t len
 /** add two numbers in base-RADIX represented by q and p, so that p = p + q   */
 static void numstrAdd( const rbase_t* q, const uint8_t N, rbase_t* p )
 {
-    uint8_t a, c = 0, i;
-    for (i = 0; i < N; c = a >= RADIX)           /* little-endian addition    */
+    size_t i, c, a;
+    for (i = c = 0; i < N; c = a >= RADIX)       /* little-endian addition    */
     {
         a = p[i] + q[i] + c;
         p[i++] = (rbase_t) (a % RADIX);
@@ -2097,8 +2097,8 @@ static void numstrAdd( const rbase_t* q, const uint8_t N, rbase_t* p )
 /** subtract two numbers in base-RADIX represented by q and p, so that p -= q */
 static void numstrSub( const rbase_t* q, const uint8_t N, rbase_t* p )
 {
-    uint8_t s, c = 0, i;
-    for (i = 0; i < N; c = s < RADIX)            /* little-endian subtraction */
+    size_t i, c, s;
+    for (i = c = 0; i < N; c = s < RADIX)        /* little-endian subtraction */
     {
         s = RADIX + p[i] - q[i] - c;
         p[i++] = (rbase_t) (s % RADIX);
@@ -2143,7 +2143,7 @@ static void FF3_Cipher( const char mode, const uint8_t* key,
         FF3round( i++, T, u, len, Xc );          /*  encryption rounds        */
         numstrAdd( Xc, u, i & 1 ? X : Xc - u );
     }
-    for (i = r; i > 0; u = len - u)              /*  A = *X,  B = *(Xc - u)   */
+    for (i = r; i > 0; u = len - u)              /* A → X, C → Xc, B → Xc - u */
     {
         FF3round( --i, T, u, len, Xc );          /*  decryption rounds        */
         numstrSub( Xc, u, i & 1 ? Xc - u : X );
@@ -2154,11 +2154,11 @@ static void FF3_Cipher( const char mode, const uint8_t* key,
 /** convert a string in base-RADIX to a big-endian number, denoted by num     */
 static void numRadix( const rbase_t* s, size_t len, uint8_t* num, size_t bytes )
 {
-    size_t i, d;
     memset( num, 0, bytes );
     while (len--)
     {
-        for (d = *s++, i = bytes; i; d >>= 8)
+        size_t i, d = *s++;
+        for (i = bytes; i; d >>= 8)
         {
             d += num[--i] * RADIX;               /*  num = num * RADIX + d    */
             num[i] = (uint8_t) d;
@@ -2169,11 +2169,11 @@ static void numRadix( const rbase_t* s, size_t len, uint8_t* num, size_t bytes )
 /** convert a big-endian number to its base-RADIX representation string: s    */
 static void strRadix( const uint8_t* num, size_t bytes, rbase_t* s, size_t len )
 {
-    size_t i, b;
     memset( s, 0, sizeof (rbase_t) * len );
     while (bytes--)
     {
-        for (b = *num++, i = len; i; b /= RADIX)
+        size_t i, b = *num++;
+        for (i = len; i; b /= RADIX)
         {
             b += s[--i] << 8;                    /*  numstr = numstr << 8 + b */
             s[i] = b % RADIX;
@@ -2184,7 +2184,7 @@ static void strRadix( const uint8_t* num, size_t bytes, rbase_t* s, size_t len )
 /** add two numbers in base-RADIX represented by q and p, so that p = p + q   */
 static void numstrAdd( const rbase_t* q, size_t N, rbase_t* p )
 {
-    size_t a, c;
+    size_t c, a;
     for (c = 0; N--; c = a >= RADIX)             /*  big-endian addition      */
     {
         a = p[N] + q[N] + c;
@@ -2195,7 +2195,7 @@ static void numstrAdd( const rbase_t* q, size_t N, rbase_t* p )
 /** subtract two numbers in base-RADIX represented by q and p, so that p -= q */
 static void numstrSub( const rbase_t* q, size_t N, rbase_t* p )
 {
-    size_t s, c;
+    size_t c, s;
     for (c = 0; N--; c = s < RADIX)              /*  big-endian subtraction   */
     {
         s = RADIX + p[N] - q[N] - c;
@@ -2234,15 +2234,15 @@ static void FF1round( const uint8_t i, const block_t P, const size_t u,
 static void FF1_Cipher( const char mode, const uint8_t* key, const size_t len,
                         const uint8_t* tweak, const size_t tweakLen, rbase_t* X )
 {
-    block_t P = { 1, 2, 1, 0, 0, 0, 10 };
-    rbase_t *Xc = X + len;
+    block_t P = { 1, 2, 1, RADIX >> 16, RADIX >> 8 & 0xFF, RADIX & 0xFF, 10 };
+    rbase_t *Xc;
     uint8_t i = tweakLen % BLOCKSIZE, r = mode ? 0 : 10;
     size_t u = (len + 1 - mode) >> 1, t = tweakLen - i;
 
     P[7] = len / 2 & 0xFF;
-    putValueB( P, 5, RADIX );                    /* P = [1,2,1][radix][10]... */
     putValueB( P, 11, len );
-    putValueB( P, 15, tweakLen );
+    putValueB( P, 15, tweakLen );                /* P = [1,2,1][radix][10]... */
+    Xc = X + len;
 
     AES_SetKey( key );
     rijndaelEncrypt( P, P );
@@ -2253,14 +2253,14 @@ static void FF1_Cipher( const char mode, const uint8_t* key, const size_t len,
     }
     else                                         /* zero pad and feed to PRF  */
     {
-        xMac( &tweak[t], i, P, &rijndaelEncrypt, P );
+        xMac( tweak + t, i, P, &rijndaelEncrypt, P );
     }
-    for (i = r; i < 10; u = len - u)             /* A = *X,  B = *(Xc - u)    */
+    for (i = r; i < 10; u = len - u)             /* Feistel procedure         */
     {
         FF1round( i++, P, u, len, Xc );          /* encryption rounds         */
         numstrAdd( Xc, u, i & 1 ? X : Xc - u );
     }
-    for (i = r; i != 0; u = len - u)
+    for (i = r; i != 0; u = len - u)             /* A → X, C → Xc, B → Xc - u */
     {
         FF1round( --i, P, u, len, Xc );          /* decryption rounds         */
         numstrSub( Xc, u, i & 1 ? Xc - u : X );

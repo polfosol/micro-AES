@@ -2,7 +2,7 @@
 
 **A minimalist ANSI-C compatible code for the AES encryption and block cipher modes**.
 
-[![GitHub release](https://img.shields.io/static/v1?message=%C2%B5AES&logo=github&labelColor=gray&color=blue&logoColor=white&label=%20)](https://github.com/polfosol/micro-AES) ![C](https://img.shields.io/badge/langauge-C-blue.svg) [![Build Status](https://img.shields.io/badge/v1.5.2-blue)](https://github.com/polfosol/micro-AES/files/10227613/micro_aes-v1.5.2.zip) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![GitHub release](https://img.shields.io/static/v1?message=%C2%B5AES&logo=github&labelColor=gray&color=blue&logoColor=white&label=%20)](https://github.com/polfosol/micro-AES) ![C](https://img.shields.io/badge/langauge-C-blue.svg) [![Build Status](https://img.shields.io/badge/v1.5.3-blue)](https://github.com/polfosol/micro-AES/files/10303378/micro_aes-v1.5.3.zip) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 This library is a highly flexible and portable implementation of most of the AES related algorithms.
 
@@ -29,9 +29,8 @@ This library is a highly flexible and portable implementation of most of the AES
   You can even compile it with [Tiny C Compiler](https://bellard.org/tcc/):
 
   ```
-  tcc -c main.c      -o main.o
-  tcc -c micro_aes.c -o micro_aes.o
-  tcc -o micro_aes.exe  main.o micro_aes.o
+  path/to/tcc.exe -c micro_aes.c
+  path/to/tcc.exe micro_aes.c -run main.c
   ```
 ## Examples
 See the `main.c` file which has some example codes illustrating how to use the API functions, along with test vectors. Also check out the `/testvectors` directory.

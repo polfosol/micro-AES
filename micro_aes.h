@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.h
  Author      : polfosol
- Version     : 9.9.6.2
+ Version     : 9.9.7.0
  Copyright   : copyright © 2022 - polfosol
  Description : μAES ™ is a minimalist all-in-one library for AES encryption
  ==============================================================================
@@ -75,10 +75,6 @@ AES block-cipher modes of operation. The following modes can be enabled/disabled
 Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
  -----------------------------------------------------------------------------*/
 
-#if ECB || CBC || XEX || KWA || M_RIJNDAEL
-#define DECRYPTION      1  /* only these modes need the decrypt part of AES   */
-#endif
-
 #if ECB || (CBC && !CTS) || (XEX && !XTS)
 #define AES_PADDING     0  /* standard values:  (1) PKCS#7  (2) IEC7816-4     */
 #endif
@@ -86,6 +82,10 @@ Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
 #if FPE
 #define CUSTOM_ALPHABET 0  /* if disabled, use default alphabet (digits 0..9) */
 #define FF_X            1  /* algorithm type:  (1) for FF1, or (3) for FF3-1  */
+#endif
+
+#if ECB || CBC || XEX || KWA || M_RIJNDAEL
+#define DECRYPTION      1  /* rijndael decryption is NOT required otherwise.  */
 #endif
 
 #if CTR_NA
@@ -103,7 +103,7 @@ Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
 #endif
 
 #if EAX && !EAXP
-#define EAX_NONCE_LEN  16  /* no specified limit; can be arbitrarily large    */
+#define EAX_NONCE_LEN  16  /* no specified limit; can be arbitrarily large.   */
 #endif
 
 #if OCB
@@ -518,9 +518,8 @@ The error codes and key length should be defined here for external references:
 
 * Let me explain three extra options that are defined in the source file. If the
     length of the input cipher/plain text is 'always' less than 4KB, you can
-    enable the SMALL_CIPHER macro to save a few bytes in the compiled code. Note
-    that for key-wrapping, this limit is 42 blocks (336 bytes) of secret key.
-    These assumptions are likely to be valid for some embedded systems and small
+    enable the SMALL_CIPHER macro to save a few bytes in the compiled code. This
+    assumption is likely to be valid for some embedded systems and small-scale
     applications. Furthermore, enabling that other macro, REDUCE_CODE_SIZE had a
     considerable effect on the size of the compiled code in my own tests.
     Nonetheless, others might get a different result from them.

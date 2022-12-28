@@ -17,54 +17,54 @@ static const char
     *secondKey = "0011223344556677 8899AABBCCDDEEFF 0001020304050607 08090A0B0C0D0E0F",
     *cipherKey = "279fb74a7572135e 8f9b8ef6d1eee003 69c4e0d86a7b0430 d8cdb78070b4c55a",
     *iVec      = "8ea2b7ca516745bf eafc49904b496089",
-    *plainText = "c9f775baafa36c25 cd610d3c75a482ea dda97ca4864cdfe0 6eaf70a0ec0d7191\
-                  d55027cf8f900214 e634412583ff0b47 8ea2b7ca516745bf ea",
+    *plainText = "c9f775baafa36c25 cd610d3c75a482ea dda97ca4864cdfe0 6eaf70a0ec0d7191"
+                 "d55027cf8f900214 e634412583ff0b47 8ea2b7ca516745bf ea",
 #if AES_KEY_LENGTH == 16
-    *ecbcipher = "5d00c273f8b2607d a834632dcbb521f4 697dd4ab20bb0645 32a6545e24e33ae9\
-                  f545176111f93773 dbecd262841cf83b 10d145e71b772cf7 a12889cda84be795",
+    *ecbcipher = "5d00c273f8b2607d a834632dcbb521f4 697dd4ab20bb0645 32a6545e24e33ae9"
+                 "f545176111f93773 dbecd262841cf83b 10d145e71b772cf7 a12889cda84be795",
 #if !CTS                                  /* ↑↑ and ↓↓ both zero-padded plain text. */
-    *cbccipher = "65c48fdf9fbd6261 28f2d8bac3f71251 75e7f4821fda0263 70011632779d7403\
-                  7e9e2d298e154bc4 2dc7a9bc419b915d c119ef461ac4e1bc 8a7e36bf92b3b3d1",
+    *cbccipher = "65c48fdf9fbd6261 28f2d8bac3f71251 75e7f4821fda0263 70011632779d7403"
+                 "7e9e2d298e154bc4 2dc7a9bc419b915d c119ef461ac4e1bc 8a7e36bf92b3b3d1",
 #else
-    *cbccipher = "65c48fdf9fbd6261 28f2d8bac3f71251 75e7f4821fda0263 70011632779d7403\
-                  c119ef461ac4e1bc 8a7e36bf92b3b3d1 7e9e2d298e154bc4 2d",
+    *cbccipher = "65c48fdf9fbd6261 28f2d8bac3f71251 75e7f4821fda0263 70011632779d7403"
+                 "c119ef461ac4e1bc 8a7e36bf92b3b3d1 7e9e2d298e154bc4 2d",
 #endif
-    *cfbcipher = "edab3105e673bc9e b9102539a9f457bc 245c14e1bff81b5b 4a4a147c988cb0a6\
-                  3f9c56525efbe64a 876ad1d761d3fc93 59fb4f5b2354acd4 90",
-    *ofbcipher = "edab3105e673bc9e b9102539a9f457bc d28c8e4c92995f5c d9426926be1e775d\
-                  e22b8ce4d0278b18 181b8bec93b9726f 959aa5d701d46102 f0",
+    *cfbcipher = "edab3105e673bc9e b9102539a9f457bc 245c14e1bff81b5b 4a4a147c988cb0a6"
+                 "3f9c56525efbe64a 876ad1d761d3fc93 59fb4f5b2354acd4 90",
+    *ofbcipher = "edab3105e673bc9e b9102539a9f457bc d28c8e4c92995f5c d9426926be1e775d"
+                 "e22b8ce4d0278b18 181b8bec93b9726f 959aa5d701d46102 f0",
 #if CTR_IV_LENGTH == 16
-    *ctrcipher = "edab3105e673bc9e b9102539a9f457bc f2e2606dfa3f93c5 c51b910a89cddb67\
-                  191a118531ea0427 97626c9bfd370426 fdf3f59158bf7d4d 43",
-#elif CTR_STARTVALUE == 1
-    *ctrcipher = "6c6bae886c235d8c 7997d45c1bf0bca2 48b4bca9eb396d1b f6945e5b7a4fc10f\
-                  488cfe76fd5eaeff 2b8fb469f78fa61e 285e4cf9b9aee3d0 a8",
+    *ctrcipher = "edab3105e673bc9e b9102539a9f457bc f2e2606dfa3f93c5 c51b910a89cddb67"
+                 "191a118531ea0427 97626c9bfd370426 fdf3f59158bf7d4d 43",
+#else
+    *ctrcipher = "6c6bae886c235d8c 7997d45c1bf0bca2 48b4bca9eb396d1b f6945e5b7a4fc10f"
+                 "488cfe76fd5eaeff 2b8fb469f78fa61e 285e4cf9b9aee3d0 a8",
 #endif
-    *xtscipher = "10f9301a157bfceb 3eb9e7bd38500b7e 959e21ba3cc1179a d7f7d7d99460e695\
-                  5e8bcb177571c719 6de58ff28c381913 e7c82d0adfd90c45 ca",
-    *ccmcipher = "d2575123438338d7 0b2955537fdfcf41 729870884e85af15 f0a74975a72b337d\
-                  04d426de87594b9a be3e6dcf07f21c99 db3999f81299d302 ad1e5ba683e9039a\
-                  5483685f1bd2c3fa 3b",   /*  <---- with 16 bytes tag */
-    *gcmcipher = "5ceab5b7c2d6dede 555a23c7e3e63274 4075a51df482730b a31485ec987ddcc8\
-                  73acdcfc6759a47b a424d838e7c0cb71 b9a4d8f4572e2141 18c8ab284ca845c1\
-                  4394618703cddf3a fb",   /*  <---- with 16 bytes tag */
-    *ocbcipher = "fc254896eb785b05 dd87f240722dd935 61f5a0ef6aff2eb6 5953da0b26257ed0\
-                  d69cb496e9a0cb1b f646151aa07e629a 28d99f0ffd7ea753 5c39f440df33c988\
-                  c55cbcc8ac086ffa 23",   /*  <---- with 16 bytes tag */
+    *xtscipher = "10f9301a157bfceb 3eb9e7bd38500b7e 959e21ba3cc1179a d7f7d7d99460e695"
+                 "5e8bcb177571c719 6de58ff28c381913 e7c82d0adfd90c45 ca",
+    *ccmcipher = "d2575123438338d7 0b2955537fdfcf41 729870884e85af15 f0a74975a72b337d"
+                 "04d426de87594b9a be3e6dcf07f21c99 db3999f81299d302 ad1e5ba683e9039a"
+                 "5483685f1bd2c3fa 3b",   /*  <---- with 16 bytes tag */
+    *gcmcipher = "5ceab5b7c2d6dede 555a23c7e3e63274 4075a51df482730b a31485ec987ddcc8"
+                 "73acdcfc6759a47b a424d838e7c0cb71 b9a4d8f4572e2141 18c8ab284ca845c1"
+                 "4394618703cddf3a fb",   /*  <---- with 16 bytes tag */
+    *ocbcipher = "fc254896eb785b05 dd87f240722dd935 61f5a0ef6aff2eb6 5953da0b26257ed0"
+                 "d69cb496e9a0cb1b f646151aa07e629a 28d99f0ffd7ea753 5c39f440df33c988"
+                 "c55cbcc8ac086ffa 23",   /*  <---- with 16 bytes tag */
 #if EAXP
-    *eaxcipher = "f516e9c20069292c c51ba8b6403ddedf 5a34798f62187f58 d723fa33573fd80b\
-                  f08ffbb09dadbd0b 6fa4812ca4bb5e6d db9a384943b36690 e81738a7a1",
+    *eaxcipher = "f516e9c20069292c c51ba8b6403ddedf 5a34798f62187f58 d723fa33573fd80b"
+                 "f08ffbb09dadbd0b 6fa4812ca4bb5e6d db9a384943b36690 e81738a7a1",
 #else                                     /*  ↑↑↑↑  with 4 bytes tag  */
-    *eaxcipher = "4e2fa1bef9ffc23f 6965ee7135981c91 af9bfe97a6b13c01 b8b99e114dda2391\
-                  50661c618335a005 47cca55a8f22fbd5 ed5ab4b4a17d0aa3 29febd14ef271bae\
-                  986810a504f01ec6 02",   /*  <---- with 16 bytes tag */
+    *eaxcipher = "4e2fa1bef9ffc23f 6965ee7135981c91 af9bfe97a6b13c01 b8b99e114dda2391"
+                 "50661c618335a005 47cca55a8f22fbd5 ed5ab4b4a17d0aa3 29febd14ef271bae"
+                 "986810a504f01ec6 02",   /*  <---- with 16 bytes tag */
 #endif
-    *gsvcipher = "2f1488496ada3f70 9760420ac72e5acf a977f6add4c55ac6 85f1b9dff8f381e0\
-                  2a64bbdd64cdd778 525462949bb0b141 db908c5cfa365750 3666f879ac879fcb\
-                  f25c15d496a1e6f7 f8",   /*  <---- with 16 bytes tag */
-    *sivcipher = "f6d8137b17d58d13 af040e8abadd965b 9bae3a3de90ca6f7 049c2528767da2cf\
-                  ef17de85b1d07b59 d26b0595071ae428 3015840928e2c7f5 9abf06003b14b9ee\
-                  25111d34bb2bfcc2 25",   /*  16 bytes i.v. PREPENDED */
+    *gsvcipher = "2f1488496ada3f70 9760420ac72e5acf a977f6add4c55ac6 85f1b9dff8f381e0"
+                 "2a64bbdd64cdd778 525462949bb0b141 db908c5cfa365750 3666f879ac879fcb"
+                 "f25c15d496a1e6f7 f8",   /*  <---- with 16 bytes tag */
+    *sivcipher = "f6d8137b17d58d13 af040e8abadd965b 9bae3a3de90ca6f7 049c2528767da2cf"
+                 "ef17de85b1d07b59 d26b0595071ae428 3015840928e2c7f5 9abf06003b14b9ee"
+                 "25111d34bb2bfcc2 25",   /*  16 bytes i.v. PREPENDED */
     *fpe_plain = "012345678910111213141516171819202122232425262728293031323",
 #if FF_X == 3                             /*  <---- MAXLEN=56 if R=10 */
     *fpecipher = "2762314572750077330730600633360181437267478307592965508",
@@ -75,14 +75,14 @@ static const char
     *p1305_mac = "3175bed9bd01821a 62d4c7bef26722be",
     *wrapped   = "1FA68B0A8112B447 AEF34BD8FB5A7B82 9D3E862371D2CFE5";
 #elif AES___  == 192                      /*  ↓↓↓↓  PKCS#7 is enabled */
-    *ecbcipher = "af1893f0fbb09a43 7f6b0fd4f4977890 7bb85cccf1e9d2e3 ebe5bae935107868\
-                  c6d72cb2ca375c12 ce6b6b1141141fd0 d268d14db351d680 5aabb99427341da9",
+    *ecbcipher = "af1893f0fbb09a43 7f6b0fd4f4977890 7bb85cccf1e9d2e3 ebe5bae935107868"
+                 "c6d72cb2ca375c12 ce6b6b1141141fd0 d268d14db351d680 5aabb99427341da9",
     *wrapped   = "031D33264E15D332 68F24EC260743EDC E1C6C7DDEE725A93 6BA814915C6762D2";
 #else
-    *xtscipher = "40bfcc14845b1bb4 15dd13abf1e6f89d 3bfd794cf6655ffd 14c0d7e4177eeaf4\
-                  5dd95f05663fcfb4 47671154a91b9d00 d1bd7a35c14c7410 9a",
-    *wrapped   = "28C9F404C4B810F4 CBCCB35CFB87F826 3F5786E2D80ED326 CBC7F0E71A99F43B\
-                  FB988B9B7A02DD21";      /*  <---- p. 34 of RFC-3394 */
+    *xtscipher = "40bfcc14845b1bb4 15dd13abf1e6f89d 3bfd794cf6655ffd 14c0d7e4177eeaf4"
+                 "5dd95f05663fcfb4 47671154a91b9d00 d1bd7a35c14c7410 9a",
+    *wrapped   = "28C9F404C4B810F4 CBCCB35CFB87F826 3F5786E2D80ED326 CBC7F0E71A99F43B"
+                 "FB988B9B7A02DD21";      /*  <---- p. 34 of RFC-3394 */
 #endif
 
 #include <stdio.h>

@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.h
  Author      : polfosol
- Version     : 9.9.7.0
+ Version     : 9.9.8.0
  Copyright   : copyright © 2022 - polfosol
  Description : μAES ™ is a minimalist all-in-one library for AES encryption
  ==============================================================================
@@ -139,8 +139,8 @@ Encryption/decryption of a single block with Rijndael
 #if M_RIJNDAEL
 void AES_Cipher( const uint8_t* key,          /* encryption/decryption key    */
                  const char mode,             /* encrypt: 'E', decrypt: 'D'   */
-                 const uint8_t* x,            /* input block byte array       */
-                 uint8_t* y );                /* output block byte array      */
+                 const uint8_t x[16],         /* input bytes (or input block) */
+                 uint8_t y[16] );             /* output block                 */
 #endif
 
 /**----------------------------------------------------------------------------
@@ -163,13 +163,13 @@ Main functions for CBC-AES block ciphering
  -----------------------------------------------------------------------------*/
 #if CBC
 char AES_CBC_encrypt( const uint8_t* key,     /* encryption key               */
-                      const uint8_t* iVec,    /* initialization vector        */
+                      const uint8_t iVec[16], /* initialization vector        */
                       const uint8_t* pntxt,   /* plaintext buffer             */
                       const size_t ptextLen,  /* length of input plain text   */
                       uint8_t* crtxt );       /* cipher-text result           */
 
 char AES_CBC_decrypt( const uint8_t* key,     /* decryption key               */
-                      const uint8_t* iVec,    /* initialization vector        */
+                      const uint8_t iVec[16], /* initialization vector        */
                       const uint8_t* crtxt,   /* cipher-text buffer           */
                       const size_t crtxtLen,  /* length of input cipher text  */
                       uint8_t* pntxt );       /* plaintext result             */
@@ -180,13 +180,13 @@ Main functions for CFB-AES block ciphering
  -----------------------------------------------------------------------------*/
 #if CFB
 void AES_CFB_encrypt( const uint8_t* key,     /* encryption key               */
-                      const uint8_t* iVec,    /* initialization vector        */
+                      const uint8_t iVec[16], /* initialization vector        */
                       const uint8_t* pntxt,   /* plaintext buffer             */
                       const size_t ptextLen,  /* length of input plain text   */
                       uint8_t* crtxt );       /* cipher-text result           */
 
 void AES_CFB_decrypt( const uint8_t* key,     /* decryption key               */
-                      const uint8_t* iVec,    /* initialization vector        */
+                      const uint8_t iVec[16], /* initialization vector        */
                       const uint8_t* crtxt,   /* cipher-text buffer           */
                       const size_t crtxtLen,  /* length of input cipher text  */
                       uint8_t* pntxt );       /* plaintext result             */
@@ -197,13 +197,13 @@ Main functions for OFB-AES block ciphering
  -----------------------------------------------------------------------------*/
 #if OFB
 void AES_OFB_encrypt( const uint8_t* key,     /* encryption key               */
-                      const uint8_t* iVec,    /* initialization vector        */
+                      const uint8_t iVec[16], /* initialization vector        */
                       const uint8_t* pntxt,   /* plaintext buffer             */
                       const size_t ptextLen,  /* length of input plain text   */
                       uint8_t* crtxt );       /* cipher-text result           */
 
 void AES_OFB_decrypt( const uint8_t* key,     /* decryption key               */
-                      const uint8_t* iVec,    /* initialization vector        */
+                      const uint8_t iVec[16], /* initialization vector        */
                       const uint8_t* crtxt,   /* cipher-text buffer           */
                       const size_t crtxtLen,  /* length of input cipher text  */
                       uint8_t* pntxt );       /* plaintext result             */
@@ -252,11 +252,11 @@ void AES_SIV_encrypt( const uint8_t* keys,    /* encryption key pair          */
                       const size_t ptextLen,  /* length of input plain text   */
                       const uint8_t* aData,   /* added authentication data    */
                       const size_t aDataLen,  /* size of authentication data  */
-                      uint8_t* iv,            /* synthesized initial-vector   */
+                      uint8_t iv[16],         /* synthesized initial-vector   */
                       uint8_t* crtxt );       /* cipher-text result           */
 
 char AES_SIV_decrypt( const uint8_t* keys,    /* decryption key pair          */
-                      const uint8_t* iv,      /* provided initial-vector      */
+                      const uint8_t iv[16],   /* provided initial-vector      */
                       const uint8_t* crtxt,   /* cipher text                  */
                       const size_t crtxtLen,  /* length of input cipher-text  */
                       const uint8_t* aData,   /* added authentication data    */
@@ -275,7 +275,7 @@ void AES_GCM_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t* aData,   /* added authentication data    */
                       const size_t aDataLen,  /* size of authentication data  */
                       uint8_t* crtxt,         /* cipher-text result           */
-                      uint8_t* auTag );       /* message authentication tag   */
+                      uint8_t auTag[16] );    /* message authentication tag   */
 
 char AES_GCM_decrypt( const uint8_t* key,     /* decryption key               */
                       const uint8_t* nonce,   /* a.k.a initialization vector  */
@@ -298,7 +298,7 @@ void AES_CCM_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t* aData,   /* added authentication data    */
                       const size_t aDataLen,  /* size of authentication data  */
                       uint8_t* crtxt,         /* cipher-text result           */
-                      uint8_t* auTag );       /* message authentication tag   */
+                      uint8_t auTag[16] );    /* message authentication tag   */
 
 char AES_CCM_decrypt( const uint8_t* key,     /* decryption key               */
                       const uint8_t* nonce,   /* a.k.a initialization vector  */
@@ -321,7 +321,7 @@ void AES_OCB_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t* aData,   /* added authentication data    */
                       const size_t aDataLen,  /* size of authentication data  */
                       uint8_t* crtxt,         /* cipher-text result           */
-                      uint8_t* auTag );       /* message authentication tag   */
+                      uint8_t auTag[16] );    /* message authentication tag   */
 
 char AES_OCB_decrypt( const uint8_t* key,     /* decryption key               */
                       const uint8_t* nonce,   /* a.k.a initialization vector  */
@@ -348,7 +348,7 @@ void AES_EAX_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t* aData,   /* added authentication data    */
                       const size_t aDataLen,  /* size of authentication data  */
                       uint8_t* crtxt,         /* cipher-text result           */
-                      uint8_t* auTag );       /* message authentication tag   */
+                      uint8_t auTag[16] );    /* message authentication tag   */
 #endif
 
 char AES_EAX_decrypt( const uint8_t* key,     /* decryption key               */
@@ -376,7 +376,7 @@ void GCM_SIV_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t* aData,   /* added authentication data    */
                       const size_t aDataLen,  /* size of authentication data  */
                       uint8_t* crtxt,         /* cipher-text result           */
-                      uint8_t* auTag );       /* 16-bytes mandatory tag       */
+                      uint8_t auTag[16] );    /* 16-bytes mandatory tag       */
 
 char GCM_SIV_decrypt( const uint8_t* key,     /* decryption key               */
                       const uint8_t* nonce,   /* provided 96-bit nonce        */
@@ -431,10 +431,10 @@ Main function for Poly1305-AES message authentication code
  -----------------------------------------------------------------------------*/
 #if POLY1305
 void AES_Poly1305( const uint8_t* keys,       /* encryption/mixing key pair   */
-                   const uint8_t* nonce,      /* the 128-bit nonce            */
+                   const uint8_t nonce[16],   /* the 128-bit nonce            */
                    const void* data,          /* input data buffer            */
                    const size_t dataSize,     /* size of data in bytes        */
-                   uint8_t* mac );            /* calculated poly1305-AES mac  */
+                   uint8_t mac[16] );         /* calculated poly1305-AES mac  */
 #endif
 
 /**----------------------------------------------------------------------------
@@ -444,7 +444,7 @@ Main function for AES Cipher-based Message Authentication Code
 void AES_CMAC( const uint8_t* key,            /* encryption/cipher key        */
                const void* data,              /* input data buffer            */
                const size_t dataSize,         /* size of data in bytes        */
-               uint8_t* mac );                /* calculated CMAC hash         */
+               uint8_t mac[16] );             /* calculated CMAC hash         */
 #endif
 
 #ifdef __cplusplus

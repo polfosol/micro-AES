@@ -2,15 +2,15 @@
 
 **A minimalist ANSI-C compatible code for the AES encryption and block cipher modes**.
 
-[![GitHub repo](https://img.shields.io/static/v1?message=%C2%B5AES&logo=github&labelColor=gray&color=blue&logoColor=white&label=%20)](https://github.com/polfosol/micro-AES) ![C](https://img.shields.io/badge/langauge-C-blue.svg) [![version](https://img.shields.io/badge/version-1.6.0-blue)](../files/10325624/micro_aes-v1.6.0.zip "micro_aes-v1.6.0.zip") [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![GitHub repo](https://img.shields.io/static/v1?message=%C2%B5AES&logo=github&labelColor=gray&color=blue&logoColor=white&label=%20)](https://github.com/polfosol/micro-AES "µAES") ![C](https://img.shields.io/badge/langauge-C-blue.svg) [![version](https://img.shields.io/badge/version-1.6.2-blue)](https://github.com/polfosol/micro-AES/files/10333727/micro_aes-v1.6.2.zip "micro_aes-v1.6.2.zip") [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-This library is a highly flexible and portable implementation of most of the AES related algorithms.
+This library is a highly flexible and portable implementation of most of the AES related algorithms. 
 
 ## Features
 
 * $\textrm{\textbf{Comprehensive}}$ — supports all standard AES key sizes (128, 192 and 256 bits) along with almost every block-cipher mode.
 
-  All popular (and some unpopular) block ciphering modes of the AES are implemented in this library, such as [**_ECB_**, **_CBC_**, **_CFB_**, **_OFB_**, **_CTR_**](https://csrc.nist.gov/publications/detail/sp/800-38a/final "Described in NIST SP 800-38A"), [**_GCM_**](https://csrc.nist.gov/publications/detail/sp/800-38d/final "NIST SP 800-38D"), [**_CCM_**](https://csrc.nist.gov/publications/detail/sp/800-38c/final "NIST SP 800-38C"), [**_XTS_**](https://csrc.nist.gov/publications/detail/sp/800-38e/final "NIST SP 800-38E"), [**_KW_**](https://csrc.nist.gov/publications/detail/sp/800-38f/final "NIST SP 800-38F") [(_KWA_)](https://www.rfc-editor.org/rfc/rfc3394 "RFC-3394"), [**_OCB_**](https://www.rfc-editor.org/rfc/rfc7253.html "RFC-7253"), [**_EAX_**](../files/10318260/eax.pdf "Bellare-Rogaway-Wagner paper. For more info, see wikipedia.") / [**_EAX'_**](../files/10318265/eax-prime.pdf "It is theoretically broken and shouldn't be used. The ANSI C12.22 has not withdrawn it yet, so here we go."), [**_SIV_**](../files/10318348/siv.pdf "You may also refer to the RFC-5297"), [**_GCM-SIV_**](https://www.rfc-editor.org/rfc/rfc8452.html "RFC-8452"), [**_FPE_** (**_FF1_** / **_FF3-1_**)](https://csrc.nist.gov/publications/detail/sp/800-38g/final "NIST SP 800-38G"), and furthermore, authentication APIs for [**_CMAC_**](https://csrc.nist.gov/publications/detail/sp/800-38b/final "NIST SP 800-38B") and [**_Poly1305-AES_**](../files/10319003/poly1305.pdf "From D. J. Bernstein's website: cr.yp.to/mac.html").
+  All popular (and some unpopular) block ciphering modes of the AES are implemented in this library, such as [**_ECB_**, **_CBC_**, **_CFB_**, **_OFB_**, **_CTR_**](https://csrc.nist.gov/publications/detail/sp/800-38a/final "Described in NIST SP 800-38A"), [**_GCM_**](https://csrc.nist.gov/publications/detail/sp/800-38d/final "NIST SP 800-38D"), [**_CCM_**](https://csrc.nist.gov/publications/detail/sp/800-38c/final "NIST SP 800-38C"), [**_XTS_**](https://csrc.nist.gov/publications/detail/sp/800-38e/final "NIST SP 800-38E"), [**_KW_**](https://csrc.nist.gov/publications/detail/sp/800-38f/final "NIST SP 800-38F") [(_KWA_)](https://www.rfc-editor.org/rfc/rfc3394 "RFC-3394"), [**_OCB_**](https://www.rfc-editor.org/rfc/rfc7253.html "RFC-7253"), [**_EAX_**](https://github.com/polfosol/micro-AES/files/10318260/eax.pdf "Bellare-Rogaway-Wagner paper. For more info, see wikipedia.") / [**_EAX'_**](https://github.com/polfosol/micro-AES/files/10318265/eax-prime.pdf "It is theoretically broken and shouldn't be used. The ANSI C12.22 has not withdrawn it yet, so here we go."), [**_SIV_**](https://github.com/polfosol/micro-AES/files/10318348/siv.pdf "You may also refer to the RFC-5297"), [**_GCM-SIV_**](https://www.rfc-editor.org/rfc/rfc8452.html "RFC-8452"), [**_FPE_** (**_FF1_** / **_FF3-1_**)](https://csrc.nist.gov/publications/detail/sp/800-38g/final "NIST SP 800-38G"), and furthermore, authentication APIs for [**_CMAC_**](https://csrc.nist.gov/publications/detail/sp/800-38b/final "NIST SP 800-38B") and [**_Poly1305-AES_**](https://github.com/polfosol/micro-AES/files/10319003/poly1305.pdf "From D. J. Bernstein's website: cr.yp.to/mac.html").
 
 * $\textrm{\textbf{All in one}}$ — the whole implementation code is in a single C file with no external dependencies.
 
@@ -39,7 +39,7 @@ See the `main.c` file which has some example codes illustrating how to use the A
 
 * First, please keep in mind that most security experts strongly warn *against* implementing your own version of AES—or other ciphering algorithms; AND THEY ARE ABSOLUTELY RIGHT!
 
-  Everyone who is becoming familiar with cryptography, should first sign [Jeff Moser's](https://www.moserware.com/2009/09/stick-figure-guide-to-advanced.html) so-called "Foot Shooting Prevention Agreement". To save you a click and scroll, I have put a copy of it below (but it is recommended to follow the link and read that article if you haven't).
+  Everyone who is becoming familiar with cryptography, should first sign [Jeff Moser's](https://www.moserware.com/2009/09/stick-figure-guide-to-advanced.html "A stick figure guide to AES") so-called "Foot Shooting Prevention Agreement". To save you a click and scroll, I have put a copy of it below (but it is recommended to follow the link and read that article if you haven't).
 
   With that in mind, I shall say that the main purpose of developing µAES was purely educational. I learned a lot during writing these codes and I hope that somebody, some day, would gain a bit of knowledge from it.
 
@@ -57,4 +57,4 @@ All the contents of this repository (except the ones that I didn't write!) are s
 
 Copyright © 2022 - polfosol
 
-$In$ $sorrowful$ $memory$ $of$ [**_Mahsa  Amini_**](https://en.wikipedia.org/wiki/Death_of_Mahsa_Amini) :black_heart:
+$In$ $sorrowful$ $memory$ $of$ [**_Mahsa  Amini_**](https://en.wikipedia.org/wiki/Death_of_Mahsa_Amini "MAY ALL THE DICTATORS ROT IN HELL") :black_heart:

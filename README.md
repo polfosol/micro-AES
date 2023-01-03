@@ -2,9 +2,9 @@
 
 **A minimalist ANSI-C compatible code for the AES encryption and block cipher modes**.
 
-[![GitHub repo](https://img.shields.io/static/v1?message=%C2%B5AES&logo=github&labelColor=gray&color=blue&logoColor=white&label=%20)](https://github.com/polfosol/micro-AES "µAES") ![C](https://img.shields.io/badge/langauge-C-blue.svg) [![version](https://img.shields.io/badge/version-1.6.2-blue)](https://github.com/polfosol/micro-AES/files/10333727/micro_aes-v1.6.2.zip "micro_aes-v1.6.2.zip") [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![GitHub repo](https://img.shields.io/static/v1?message=%C2%B5AES&logo=github&labelColor=gray&color=blue&logoColor=white&label=%20)](https://github.com/polfosol/micro-AES "µAES") ![C](https://img.shields.io/badge/langauge-C-blue.svg) [![version](https://img.shields.io/badge/version-1.6.4-blue)](https://github.com/polfosol/micro-AES/files/10345947/micro_aes-v1.6.4.zip "micro_aes-v1.6.4.zip") [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-This library is a highly flexible and portable implementation of most of the AES related algorithms. 
+This library is a highly flexible and portable implementation of most of the AES related algorithms.
 
 ## Features
 
@@ -33,7 +33,7 @@ This library is a highly flexible and portable implementation of most of the AES
   path/to/tcc.exe micro_aes.c -run main.c
   ```
 ## Examples
-See the `main.c` file which has some example codes illustrating how to use the API functions, along with test vectors. Also check out the `/testvectors` directory.
+See the `main.c` file which has some example codes demonstrating how to use the API functions, along with test vectors. Also check out the `/testvectors` directory.
 
 ## Remarks
 

@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.h
  Author      : polfosol
- Version     : 9.9.8.0
+ Version     : 9.9.8.2
  Copyright   : copyright © 2022 - polfosol
  Description : μAES ™ is a minimalist all-in-one library for AES encryption
  ==============================================================================
@@ -68,24 +68,24 @@ AES block-cipher modes of operation. The following modes can be enabled/disabled
 #define EAXP         1     /* EAX-prime, as specified by IEEE Std 1703        */
 #endif
 
-#define WTF ! (POLY1305 || CMAC || BLOCKCIPHERS)
-#define M_RIJNDAEL  WTF    /* none of above; just rijndael API. dude.., why?  */
+#define WTF !  (AEAD_MODES || BLOCKCIPHERS)
+#define M_RIJNDAEL   WTF   /* none of above; just rijndael API. dude.., why?  */
 
 /**----------------------------------------------------------------------------
 Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
  -----------------------------------------------------------------------------*/
 
 #if ECB || (CBC && !CTS) || (XEX && !XTS)
-#define AES_PADDING     0  /* standard values:  (1) PKCS#7  (2) IEC7816-4     */
+#define AES_PADDING     0  /* standard values: (1) PKCS#7  (2) ISO/IEC7816-4  */
+#endif
+
+#if ECB || CBC || XEX || KWA || M_RIJNDAEL
+#define DECRYPTION      1  /* rijndael decryption is NOT required otherwise.  */
 #endif
 
 #if FPE
 #define CUSTOM_ALPHABET 0  /* if disabled, use default alphabet (digits 0..9) */
 #define FF_X            1  /* algorithm type:  (1) for FF1, or (3) for FF3-1  */
-#endif
-
-#if ECB || CBC || XEX || KWA || M_RIJNDAEL
-#define DECRYPTION      1  /* rijndael decryption is NOT required otherwise.  */
 #endif
 
 #if CTR_NA
@@ -409,7 +409,9 @@ Main functions for FPE-AES; more info at the bottom of this page.
 #if FPE
 char AES_FPE_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t* tweak,   /* tweak bytes                  */
-#if FF_X != 3
+#if FF_X == 3
+#define FF3_TWEAK_LEN 7                       /* set 7 for FF3-1, or 8 if FF3 */
+#else
                       const size_t tweakLen,  /* size of tweak array          */
 #endif
                       const void* pntxt,      /* input plaintext string       */
@@ -434,7 +436,7 @@ void AES_Poly1305( const uint8_t* keys,       /* encryption/mixing key pair   */
                    const uint8_t nonce[16],   /* the 128-bit nonce            */
                    const void* data,          /* input data buffer            */
                    const size_t dataSize,     /* size of data in bytes        */
-                   uint8_t mac[16] );         /* calculated poly1305-AES mac  */
+                   uint8_t mac[16] );         /* poly1305-AES mac of data     */
 #endif
 
 /**----------------------------------------------------------------------------
@@ -444,7 +446,7 @@ Main function for AES Cipher-based Message Authentication Code
 void AES_CMAC( const uint8_t* key,            /* encryption/cipher key        */
                const void* data,              /* input data buffer            */
                const size_t dataSize,         /* size of data in bytes        */
-               uint8_t mac[16] );             /* calculated CMAC hash         */
+               uint8_t mac[16] );             /* CMAC result of input data    */
 #endif
 
 #ifdef __cplusplus
@@ -520,8 +522,8 @@ The error codes and key length should be defined here for external references:
     length of the input cipher/plain text is 'always' less than 4KB, you can
     enable the SMALL_CIPHER macro to save a few bytes in the compiled code. This
     assumption is likely to be valid for some embedded systems and small-scale
-    applications. Furthermore, enabling that other macro, REDUCE_CODE_SIZE had a
-    considerable effect on the size of the compiled code in my own tests.
+    applications. Furthermore, disabling that other macro, DONT_USE_FUNCTIONS
+    had a considerable effect on the size of the compiled code in my own tests.
     Nonetheless, others might get a different result from them.
 
     The INCREASE_SECURITY macro, as its name suggests, is dealing with security

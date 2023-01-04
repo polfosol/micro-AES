@@ -2,9 +2,9 @@
  ==============================================================================
  Name        : micro_fpe.h
  Author      : polfosol
- Version     : 2.1.0.0
+ Version     : 2.1.0.1
  Copyright   : copyright © 2022 - polfosol
- Description : illustrating some sample alphabets for the FPE mode of μAES ™
+ Description : demonstrating some sample alphabets for the FPE mode of μAES ™
  ==============================================================================
  */
 
@@ -149,10 +149,10 @@
 /**
  * or we can do something like this to set MINLEN:
  *
-#if RADIX > 99
-#define MINLEN  (2 + (RADIX < 1000))
+#if RADIX >= 32
+#define MINLEN  (2 + (RADIX < 1000) + (RADIX < 100))
 #elif RADIX > 5
-#define MINLEN  (4 + (RADIX < 32) + (RADIX < 16) + (RADIX < 10) + (RADIX < 8))
+#define MINLEN  (5 + (RADIX < 16) + (RADIX < 10) + (RADIX < 8))
 #else
 #define MINLEN  (20 / (RADIX >> 1) - (RADIX & 1) - 6 * (RADIX == 3))
 #endif

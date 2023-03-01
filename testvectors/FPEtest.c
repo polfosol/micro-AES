@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : FPEtest.c
  Author      : polfosol
- Version     : 1.4.0.0
+ Version     : 1.4.1.0
  Copyright   : copyright © 2022 - polfosol
  Description : illustrating how to validate NIST's vectors for AES-FPE mode
  ==============================================================================
@@ -13,34 +13,32 @@
 
 #define TESTFILEPATH "FPE_FF1&FF3&FF3-1.tv"
 
-static void str2bytes(const char* str, uint8_t* bytes)
-#define char2num(c)  (c > '9' ? (c & 7) + 9 : c & 0xF)
+static void str2bytes(const char* hex, uint8_t* bytes)
 {
-    size_t i, j;
-    for (i = 0, j = ~0; str[i]; ++i)
+    unsigned shl = 0;
+    for (--bytes; *hex; ++hex)
     {
-        if (str[i] < '0' || str[i] > 'f') continue;
-        if (j++ & 1) bytes[j / 2] = char2num(str[i]) << 4;
-        else bytes[j / 2] |= char2num(str[i]);
+        if (*hex < '0' || 'f' < *hex)  continue;
+        if ((shl ^= 4) != 0)  *++bytes = 0;
+        *bytes |= (*hex % 16 + (*hex > '9') * 9) << shl;
     }
 }
 
-static void bytes2str(const uint8_t* bytes, char* str, size_t len)
-#define num2char(x)  ((x) > 9 ? 'A' - 10 + (x) : '0' + (x))
+static void bytes2str(const uint8_t* bytes, char* str, const size_t len)
 {
-    size_t i, j;
-    for (i = 0, j = 0; i < len; ++i)
+    const char offset = 0x27;       /* offset must be 7 for uppercase */
+    size_t i = len + len, shr = 0;
+    for (str[i] = 0; i--; shr ^= 4)
     {
-        str[j++] = num2char(bytes[i] >> 4);
-        str[j++] = num2char(bytes[i] & 15);
+        str[i] = bytes[i / 2] >> shr & 0xF | '0';
+        if (str[i] > '9')  str[i] += offset;
     }
-    str[j] = 0;
 }
 
 static int ciphertest(uint8_t* key, uint8_t* tk, char* a, char* p, char* c,
                       size_t n, size_t nt, char* r)
 {
-    char sk[2*AES_KEY_LENGTH + 1], st[65], msg[30], tmp[0x800], t = 0;
+    char sk[2*AES_KEY_SIZE + 1], st[65], msg[30], tmp[0x800], t = 0;
     sprintf(msg, "%s", "passed the test");
 #if FF_X == 3
     AES_FPE_encrypt(key, tk, p, n, tmp);
@@ -63,7 +61,7 @@ static int ciphertest(uint8_t* key, uint8_t* tk, char* a, char* p, char* c,
         sprintf(msg, "%sdecrypt failure", t ? "encrypt & " : "");
         t |= 2;
     }
-    bytes2str(key, sk, AES_KEY_LENGTH);
+    bytes2str(key, sk, AES_KEY_SIZE);
     bytes2str(tk, st, nt);
     sprintf(r, "%s\nA: %s\nK: %s\nT: %s\nP: %s\nC: %s", msg, a, sk, st, p, c);
     return t;
@@ -82,7 +80,7 @@ int main()
     };
     char buffer[0x1000], alpha[90], p[0x800], c[0x800], m[6], a = 0, *value = "";
     size_t pass = 0, df = 0, ef = 0, sp = 0, st = 0;
-    uint8_t i, key[2*AES_KEY_LENGTH], twk[32], sk = 0, n = 0;
+    uint8_t i, key[2*AES_KEY_SIZE], twk[32], sk = 0, n = 0;
     FILE *fp, *fs, *ferr;
 
     fp = fopen(TESTFILEPATH, "r");
@@ -141,11 +139,12 @@ int main()
         if (n == 2)
         {
             n = (FF_X == 3) ^ (m[2] != '3');
-            if (FF_X == 3 && strlen(m) == 3) /* old FF3 with 8-byte tweak */
-            {
-                n = 0; /* see the comments of function `FF3_Cipher` in source file */
-            }
-            if (n && a == CUSTOM_ALPHABET && sk == AES_KEY_LENGTH)
+#if FF3_TWEAK_LEN == 8
+            n &= (st == 8);      /* old FF3 with 8-byte tweak */
+#else
+            n &= FF_X != 3 || !(st == 8 && twk[7]);  /* FF3-1 */
+#endif
+            if (n && a == CUSTOM_ALPHABET && sk == AES_KEY_SIZE)
             {
                 n = ciphertest(key, twk, alpha, p, c, sp, st, buffer);
                 fprintf(n ? ferr : fs, "%s\n\n", buffer); /* save the log */

@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.h
  Author      : polfosol
- Version     : 9.9.8.2
+ Version     : 9.9.8.3
  Copyright   : copyright © 2022 - polfosol
  Description : μAES ™ is a minimalist all-in-one library for AES encryption
  ==============================================================================
@@ -122,7 +122,7 @@ Since <stdint.h> is not a part of ANSI-C, we may need a 'trick' to use uint8_t
 #if CHAR_BIT == 8
 typedef unsigned char  uint8_t;
 #endif
-#if INT_MAX > 100000L
+#if INT_MAX > 200000L
 typedef int   int32_t;
 #else
 typedef long  int32_t;
@@ -461,15 +461,15 @@ The error codes and key length should be defined here for external references:
 #define AUTHENTICATION_FAILURE   0x1A
 #define ENDED_IN_SUCCESS         0x00
 
-#if (AES___ == 256) || (AES___ == 192)
-#define AES_KEY_LENGTH (AES___/8)
+#if (AES___ != 256) && (AES___ != 192)
+#define AES_KEY_SIZE   16
 #else
-#define AES_KEY_LENGTH  16
+#define AES_KEY_SIZE   (AES___ / 8)
 #endif
 
 #endif /* header guard */
 
-/**¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯**\
+/******************************************************************************\
 ¦               Notes and remarks about the above-defined macros               ¦
 --------------------------------------------------------------------------------
 

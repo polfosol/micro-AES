@@ -1,0 +1,318 @@
+/**
+ * Since µAES code is optimized for 8-bit CPUs, it might be much less efficient
+ * for a 32-bit machine. We can apply a few tweaks, especially in the process of
+ * mixing columns, to boost its performance on such systems. For example, here's
+ * a piece of code to replace the lines #83 to #131 of "micro_aes.c" source file
+ * —starting with `#if DONT_USE_FUNCTIONS`. The endian-ness of system is crucial
+ * and must be determined by appropriate macros, e.g. let BIG_ENDIAN_INTEGERS be
+ * FALSE when compiling for a little-endian system and TRUE otherwise. Note that
+ * the `unsigned` keyword is actually equivalent to `uint32_t`. Furthermore, the
+ * body code of `MixColumns` and `InvMixColumns` must be changed as follows.. */
+
+#if BIG_ENDIAN_INTEGERS
+#define RL8(x)  rotl( x, 8 )
+#else
+#define RL8(x)  rotl( x, 24 )            /* equivalent little-endian rotation */
+#endif
+#define R16(x)  rotl( x, 16 )
+#define RRR(x)  rotl( x, 8 ) ^ rotl( x, 16 ) ^ rotl( x, 24 )
+
+/** This method must simply compile to a bit-rotate CPU instruction (ror/rol) */
+static unsigned rotl( const unsigned value, unsigned shift )
+{
+    return (value << shift) | (value >> (32 - shift));
+}
+
+/** XOR two 128-bit numbers (blocks) src and dest: optimized for 32-bit CPUs. */
+static void xorBlock( const block_t src, block_t dest )
+{
+    XOR32BITS( src[ 0], dest[ 0] );
+    XOR32BITS( src[ 4], dest[ 4] );
+    XOR32BITS( src[ 8], dest[ 8] );
+    XOR32BITS( src[12], dest[12] );
+}
+
+/** all 4 bytes of an unsigned integer are doubled [i.e. xtime-ed] in GF(2^8) */
+static void quad_xtime( unsigned* x )
+{
+    unsigned cc = (*x >> 7 & 0x1010101L) * 0x1b;
+    *x = (*x << 1 & ~0x1010101L) ^ cc;
+}
+
+--------------------------------------------------------------------------------
+MixColumns:
+    unsigned rt, i, *s = (unsigned*) &state[0];
+    for (i = Nb; i--; ++s)
+    {
+        rt  = RRR( *s );
+        *s ^= RL8( *s );
+        quad_xtime( s );
+        *s ^= rt;
+    }
+
+InvMixColumns:
+    unsigned rt, i, *s = (unsigned*) &state[0];
+    for (i = Nb; i--; ++s)
+    {
+        rt  = RRR( *s );
+        quad_xtime( s );
+        rt ^= RL8( *s ) ^ *s;
+        quad_xtime( s );
+        rt ^= R16( *s ) ^ *s;
+        quad_xtime( s );
+        *s ^= RRR( *s ) ^ rt;
+    }
+
+================================================================================
+a sample compiled assembly output, given by gcc using `-S -Os` flags:
+
+xorBlock(unsigned char const*, unsigned char*):
+        mov     eax, QWORD PTR [rdi]
+        xor     QWORD PTR [rsi], eax
+        mov     eax, QWORD PTR [rdi+8]
+        xor     QWORD PTR [rsi+8], eax
+        ret
+quad_xtime(unsigned int*):
+        mov     edx, DWORD PTR [rdi]
+        mov     eax, edx
+        add     edx, edx
+        shr     eax, 7
+        and     edx, -16843010
+        and     eax, 16843009
+        imul    eax, eax, 27
+        xor     eax, edx
+        mov     DWORD PTR [rdi], eax
+        ret
+KeyExpansion(unsigned char const*):
+        movups  xmm0, XMMWORD PTR [rdi]
+        mov     eax, 16
+        mov     dl, 1
+        movaps  XMMWORD PTR RoundKey[rip], xmm0
+.L7:
+        test    al, 15
+        jne     .L4
+        movaps  xmm1, XMMWORD PTR RoundKey[rax-16]
+        movups  XMMWORD PTR RoundKey[rax], xmm1
+        test    dl, dl
+        jne     .L5
+        mov     dl, 27
+.L5:
+        movzx   ecx, BYTE PTR RoundKey[rax-3]
+        mov     cl, BYTE PTR sbox[rcx]
+        xor     cl, BYTE PTR RoundKey[rax]
+        xor     ecx, edx
+        add     edx, edx
+        mov     BYTE PTR RoundKey[rax], cl
+        movzx   ecx, BYTE PTR RoundKey[rax-2]
+        mov     cl, BYTE PTR sbox[rcx]
+        xor     BYTE PTR RoundKey[rax+1], cl
+        movzx   ecx, BYTE PTR RoundKey[rax-1]
+        mov     cl, BYTE PTR sbox[rcx]
+        xor     BYTE PTR RoundKey[rax+2], cl
+        movzx   ecx, BYTE PTR RoundKey[rax-4]
+        mov     cl, BYTE PTR sbox[rcx]
+        xor     BYTE PTR RoundKey[rax+3], cl
+        jmp     .L6
+.L4:
+        mov     ecx, DWORD PTR RoundKey[rax]
+        xor     ecx, DWORD PTR RoundKey[rax-4]
+        mov     DWORD PTR RoundKey[rax], ecx
+.L6:
+        add     rax, 4
+        cmp     rax, 176
+        jne     .L7
+        ret
+SubBytes(unsigned char*):
+        xor     eax, eax
+.L12:
+        movzx   edx, BYTE PTR [rdi+rax]
+        mov     dl, BYTE PTR sbox[rdx]
+        mov     BYTE PTR [rdi+rax], dl
+        inc     rax
+        cmp     rax, 16
+        jne     .L12
+        ret
+ShiftRows(unsigned char (*) [4][4]):
+        mov     dl, BYTE PTR [rdi+5]
+        mov     al, BYTE PTR [rdi+1]
+        mov     BYTE PTR [rdi+1], dl
+        mov     dl, BYTE PTR [rdi+9]
+        mov     BYTE PTR [rdi+5], dl
+        mov     dl, BYTE PTR [rdi+13]
+        mov     BYTE PTR [rdi+13], al
+        mov     al, BYTE PTR [rdi+2]
+        mov     BYTE PTR [rdi+9], dl
+        mov     dl, BYTE PTR [rdi+10]
+        mov     BYTE PTR [rdi+10], al
+        mov     al, BYTE PTR [rdi+6]
+        mov     BYTE PTR [rdi+2], dl
+        mov     dl, BYTE PTR [rdi+14]
+        mov     BYTE PTR [rdi+14], al
+        mov     al, BYTE PTR [rdi+3]
+        mov     BYTE PTR [rdi+6], dl
+        mov     dl, BYTE PTR [rdi+15]
+        mov     BYTE PTR [rdi+3], dl
+        mov     dl, BYTE PTR [rdi+11]
+        mov     BYTE PTR [rdi+15], dl
+        mov     dl, BYTE PTR [rdi+7]
+        mov     BYTE PTR [rdi+7], al
+        mov     BYTE PTR [rdi+11], dl
+        ret
+MixColumns(unsigned char (*) [4][4]):
+        lea     r8, [rdi+16]
+.L16:
+        mov     eax, DWORD PTR [rdi]
+        mov     esi, eax
+        mov     ecx, eax
+        mov     edx, eax
+        ror     esi, 8
+        rol     edx, 16
+        xor     eax, esi
+        rol     ecx, 8
+        mov     DWORD PTR [rdi], eax
+        xor     ecx, edx
+        call    quad_xtime(unsigned int*)
+        xor     ecx, DWORD PTR [rdi]
+        add     rdi, 4
+        xor     ecx, esi
+        mov     DWORD PTR [rdi-4], ecx
+        cmp     rdi, r8
+        jne     .L16
+        ret
+rijndaelEncrypt(unsigned char const*, unsigned char*):
+        mov     r9, rsi
+        push    rdx
+        cmp     rsi, rdi
+        je      .L19
+        movups  xmm0, XMMWORD PTR [rdi]
+        movups  XMMWORD PTR [rsi], xmm0
+.L19:
+        mov     r10d, OFFSET FLAT:RoundKey
+.L21:
+        mov     rdi, r10
+        mov     rsi, r9
+        add     r10, 16
+        call    xorBlock(unsigned char const*, unsigned char*)
+        mov     rdi, r9
+        call    SubBytes(unsigned char*)
+        call    ShiftRows(unsigned char (*) [4][4])
+        cmp     r10, OFFSET FLAT:RoundKey+160
+        je      .L20
+        call    MixColumns(unsigned char (*) [4][4])
+        jmp     .L21
+.L20:
+        mov     edi, OFFSET FLAT:RoundKey+160
+        pop     rax
+        jmp     xorBlock(unsigned char const*, unsigned char*)
+InvSubBytes(unsigned char*):
+        xor     eax, eax
+.L24:
+        movzx   edx, BYTE PTR [rdi+rax]
+        mov     dl, BYTE PTR rsbox[rdx]
+        mov     BYTE PTR [rdi+rax], dl
+        inc     rax
+        cmp     rax, 16
+        jne     .L24
+        ret
+InvShiftRows(unsigned char (*) [4][4]):
+        mov     dl, BYTE PTR [rdi+9]
+        mov     al, BYTE PTR [rdi+13]
+        mov     BYTE PTR [rdi+13], dl
+        mov     dl, BYTE PTR [rdi+5]
+        mov     BYTE PTR [rdi+9], dl
+        mov     dl, BYTE PTR [rdi+1]
+        mov     BYTE PTR [rdi+1], al
+        mov     al, BYTE PTR [rdi+2]
+        mov     BYTE PTR [rdi+5], dl
+        mov     dl, BYTE PTR [rdi+10]
+        mov     BYTE PTR [rdi+10], al
+        mov     al, BYTE PTR [rdi+6]
+        mov     BYTE PTR [rdi+2], dl
+        mov     dl, BYTE PTR [rdi+14]
+        mov     BYTE PTR [rdi+14], al
+        mov     al, BYTE PTR [rdi+3]
+        mov     BYTE PTR [rdi+6], dl
+        mov     dl, BYTE PTR [rdi+7]
+        mov     BYTE PTR [rdi+3], dl
+        mov     dl, BYTE PTR [rdi+11]
+        mov     BYTE PTR [rdi+7], dl
+        mov     dl, BYTE PTR [rdi+15]
+        mov     BYTE PTR [rdi+15], al
+        mov     BYTE PTR [rdi+11], dl
+        ret
+InvMixColumns(unsigned char (*) [4][4]):
+        mov     rcx, rdi
+        lea     rsi, [rdi+16]
+.L28:
+        mov     rdi, rcx
+        mov     r8d, DWORD PTR [rcx]
+        add     rcx, 4
+        call    quad_xtime(unsigned int*)
+        mov     r10d, DWORD PTR [rcx-4]
+        call    quad_xtime(unsigned int*)
+        mov     r9d, DWORD PTR [rcx-4]
+        call    quad_xtime(unsigned int*)
+        mov     edx, DWORD PTR [rcx-4]
+        mov     eax, r10d
+        mov     edi, r8d
+        rol     edi, 8
+        xor     eax, r9d
+        ror     r10d, 8
+        xor     eax, edx
+        rol     r9d, 16
+        xor     eax, edi
+        mov     edi, r8d
+        ror     r8d, 8
+        rol     edi, 16
+        xor     eax, edi
+        mov     edi, edx
+        xor     eax, r8d
+        rol     edi, 8
+        xor     eax, r10d
+        xor     eax, r9d
+        xor     eax, edi
+        mov     edi, edx
+        ror     edx, 8
+        rol     edi, 16
+        xor     eax, edi
+        xor     eax, edx
+        mov     DWORD PTR [rcx-4], eax
+        cmp     rsi, rcx
+        jne     .L28
+        ret
+rijndaelDecrypt(unsigned char const*, unsigned char*):
+        push    rbp
+        mov     r11, rsi
+        push    rbx
+        push    rdx
+        cmp     rsi, rdi
+        je      .L31
+        movups  xmm0, XMMWORD PTR [rdi]
+        movups  XMMWORD PTR [rsi], xmm0
+.L31:
+        mov     ebp, OFFSET FLAT:RoundKey+144
+        mov     bl, 10
+.L34:
+        cmp     bl, 10
+        je      .L32
+        mov     rdi, r11
+        call    InvMixColumns(unsigned char (*) [4][4])
+        jmp     .L33
+.L32:
+        mov     rsi, r11
+        mov     edi, OFFSET FLAT:RoundKey+160
+        call    xorBlock(unsigned char const*, unsigned char*)
+.L33:
+        mov     rdi, r11
+        mov     rsi, r11
+        call    InvShiftRows(unsigned char (*) [4][4])
+        call    InvSubBytes(unsigned char*)
+        mov     rdi, rbp
+        sub     rbp, 16
+        call    xorBlock(unsigned char const*, unsigned char*)
+        dec     bl
+        jne     .L34
+        pop     rax
+        pop     rbx
+        pop     rbp
+        ret

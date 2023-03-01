@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_fpe.h
  Author      : polfosol
- Version     : 2.1.1.1
+ Version     : 2.1.1.2
  Copyright   : copyright © 2022 - polfosol
  Description : demonstrating some sample alphabets for the FPE mode of μAES ™
  ==============================================================================
@@ -21,7 +21,8 @@
 
 
 /******************************************************************************
- * Sample ASCII alphabets, alongside their RADIX (length of the alphabet).
+ * These strings are commonly used in ASCII-based alphabets. The declaration of
+ * an alphabet must be followed by its number of characters (RADIX).
  */
 #define DECDIGIT  "0123456789"
 #define LCLETTER  "abcdefghijklmnopqrstuvwxyz"
@@ -160,7 +161,7 @@
 #elif RADIX > 5
 #define MINLEN  (5 + (RADIX < 16) + (RADIX < 10) + (RADIX < 8))
 #else
-#define MINLEN  (20 / (RADIX >> 1) - (RADIX & 1) - 6 * (RADIX == 3))
+#define MINLEN  (40 / RADIX + RADIX / 5)
 #endif
  */
 

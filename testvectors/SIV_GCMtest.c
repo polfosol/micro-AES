@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : SIV_GCMtest.c
  Author      : polfosol
- Version     : 1.0.1.0
+ Version     : 1.0.1.1
  Copyright   : copyright © 2023 - polfosol
  Description : demonstrating how to validate ACVP vectors for AES-GCM-SIV mode
  ==============================================================================
@@ -13,34 +13,32 @@
 
 #define TESTFILEPATH "SIV_GCM_ACVP.tv"
 
-static void str2bytes(const char* str, uint8_t* bytes)
-#define char2num(c)  (c > '9' ? (c & 7) + 9 : c & 0xF)
+static void str2bytes(const char* hex, uint8_t* bytes)
 {
-    size_t i, j;
-    for (i = 0, j = ~0; str[i]; ++i)
+    unsigned shl = 0;
+    for (--bytes; *hex; ++hex)
     {
-        if (str[i] < '0' || str[i] > 'f') continue;
-        if (j++ & 1) bytes[j / 2] = char2num(str[i]) << 4;
-        else bytes[j / 2] |= char2num(str[i]);
+        if (*hex < '0' || 'f' < *hex)  continue;
+        if ((shl ^= 4) != 0)  *++bytes = 0;
+        *bytes |= (*hex % 16 + (*hex > '9') * 9) << shl;
     }
 }
 
-static void bytes2str(const uint8_t* bytes, char* str, size_t len)
-#define num2char(x)  ((x) > 9 ? 'a' - 10 + (x) : '0' + (x))
+static void bytes2str(const uint8_t* bytes, char* str, const size_t len)
 {
-    size_t i, j;
-    for (i = 0, j = 0; i < len; ++i)
+    const char offset = 0x27;       /* offset must be 7 for uppercase */
+    size_t i = len + len, shr = 0;
+    for (str[i] = 0; i--; shr ^= 4)
     {
-        str[j++] = num2char(bytes[i] >> 4);
-        str[j++] = num2char(bytes[i] & 15);
+        str[i] = bytes[i / 2] >> shr & 0xF | '0';
+        if (str[i] > '9')  str[i] += offset;
     }
-    str[j] = 0;
 }
 
 static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* a, uint8_t* c,
                       size_t np, size_t na, char* r)
 {
-    char sk[2*AES_KEY_LENGTH + 1], si[25], sp[0x100], sc[0x100], sa[0x100], msg[30];
+    char sk[2*AES_KEY_SIZE + 1], si[25], sp[0x100], sc[0x100], sa[0x100], msg[30];
     uint8_t tmp[0x90], t = 0;
     sprintf(msg, "%s", "passed the test");
 
@@ -56,7 +54,7 @@ static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* a, uint8_t
     {
         sprintf(msg, "%sdecrypt failure", t & 1 ? "encrypt & " : "");
     }
-    bytes2str(key, sk, AES_KEY_LENGTH);
+    bytes2str(key, sk, AES_KEY_SIZE);
     bytes2str(iv, si, 12);
     bytes2str(p, sp, np);
     bytes2str(a, sa, na);
@@ -70,7 +68,7 @@ int main()
     const char *linehdr[] = { "key = ", "iv = ", "aad = ", "pt = ", "ct = " };
     char buffer[0x400], *value = "";
     size_t pass = 0, df = 0, ef = 0, sk = 0, sp = 0, sa = 0, n = 0;
-    uint8_t key[AES_KEY_LENGTH], iv[12], p[80], c[96], a[80], i, j = 0;
+    uint8_t key[AES_KEY_SIZE], iv[12], p[80], c[96], a[80], i, j = 0;
     FILE *fp, *fs, *ferr;
 
     fp = fopen(TESTFILEPATH, "r");
@@ -100,7 +98,7 @@ int main()
         {
         case 0:
             sk = strlen(value) / 2;
-            if (sk == AES_KEY_LENGTH) str2bytes(value, key);
+            if (sk == AES_KEY_SIZE) str2bytes(value, key);
             break;
         case 1:
             if (strlen(value) == 24) str2bytes(value, iv);
@@ -119,7 +117,7 @@ int main()
         }
         if (n == 2)
         {
-            if (sk == AES_KEY_LENGTH)
+            if (sk == AES_KEY_SIZE)
             {
                 n = ciphertest(key, iv, p, a, c, sp, sa, buffer);
                 fprintf(n ? ferr : fs, "%s\n", buffer); /* save the log */

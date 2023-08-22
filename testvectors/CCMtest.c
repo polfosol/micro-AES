@@ -2,9 +2,9 @@
  ==============================================================================
  Name        : CCMtest.c
  Author      : polfosol
- Version     : 1.6.0.0
+ Version     : 1.6.1.2
  Copyright   : copyright © 2022 - polfosol
- Description : illustrating how the NIST's vectors for AES-CCM mode are used
+ Description : illustrating how to validate NIST's vectors for AES-CCM mode
  ==============================================================================
  */
 
@@ -13,35 +13,34 @@
 
 #define TESTFILEPATH "CCM_VNT128.rsp"
 
-static void str2bytes(const char* str, uint8_t* bytes)
-#define char2num(c)  (c > '9' ? (c & 7) + 9 : c & 0xF)
+static void str2bytes(const char* hex, uint8_t* bytes)
 {
-    size_t i, j;
-    for (i = 0, j = ~0; str[i]; ++i)
+    unsigned shl = 0;
+    for (--bytes; *hex; ++hex)
     {
-        if (str[i] < '0' || str[i] > 'f') continue;
-        if (j++ & 1) bytes[j / 2] = char2num(str[i]) << 4;
-        else bytes[j / 2] |= char2num(str[i]);
+        if (*hex < '0' || 'f' < *hex)  continue;
+        if ((shl ^= 4) != 0)  *++bytes = 0;
+        *bytes |= (*hex % 16 + (*hex > '9') * 9) << shl;
     }
 }
 
-static void bytes2str(const uint8_t* bytes, char* str, size_t len)
-#define num2char(x)  ((x) > 9 ? 'a' - 10 + (x) : '0' + (x))
+static void bytes2str(const uint8_t* bytes, char* str, const size_t len)
 {
-    size_t i, j;
-    for (i = 0, j = 0; i < len; ++i)
+    const char offset = 0x27;       /* offset must be 7 for uppercase */
+    size_t i = len + len, shr = 0;
+    for (str[i] = 0; i--; shr ^= 4)
     {
-        str[j++] = num2char(bytes[i] >> 4);
-        str[j++] = num2char(bytes[i] & 15);
+        str[i] = bytes[i / 2] >> shr & 0xF | '0';
+        if (str[i] > '9')  str[i] += offset;
     }
-    str[j] = 0;
 }
 
-static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* a, uint8_t* c, uint8_t np, uint8_t na, char* r)
+static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* a, uint8_t* c,
+                      size_t np, size_t na, char* r)
 {
-    char sk[70], si[40], sp[80], sc[96], sa[80], msg[30];
+    char sk[2*AES_KEY_SIZE + 1], si[33], sp[80], sc[96], sa[80], msg[30];
     uint8_t tmp[64], t = 0;
-    sprintf(msg, "%s", "success");
+    sprintf(msg, "%s", "passed the test");
 
     AES_CCM_encrypt(key, iv, p, np, a, na, tmp, tmp + np);
     if (memcmp(c, tmp, np + CCM_TAG_LEN))
@@ -55,7 +54,7 @@ static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* a, uint8_t
     {
         sprintf(msg, "%sdecrypt failure", t & 1 ? "encrypt & " : "");
     }
-    bytes2str(key, sk, AES_KEY_LENGTH);
+    bytes2str(key, sk, AES_KEY_SIZE);
     bytes2str(iv, si, CCM_NONCE_LEN);
     bytes2str(p, sp, np);
     bytes2str(a, sa, na);
@@ -69,7 +68,7 @@ int main()
     const char *linehdr[] = { "Key = ", "Nonce = ", "Adata = ", "Payload = ", "CT = " };
     char buffer[0x800], *value = "";
     size_t pass = 0, df = 0, ef = 0, sk = 0, sn = 0, sp = 0, sc = 0, sa = 0;
-    uint8_t i, n = 0, key[AES_KEY_LENGTH], iv[16], p[64], c[80], a[64];
+    uint8_t i, n = 0, key[AES_KEY_SIZE], iv[16], p[64], c[80], a[64];
     FILE *fp, *fs, *ferr;
 
     fp = fopen(TESTFILEPATH, "r");
@@ -99,7 +98,7 @@ int main()
         {
         case 0:
             sk = strlen(value) / 2;
-            if (sk == AES_KEY_LENGTH) str2bytes(value, key);
+            if (sk == AES_KEY_SIZE) str2bytes(value, key);
             break;
         case 1:
             sn = strlen(value) / 2;
@@ -122,7 +121,7 @@ int main()
         }
         if (n == 2)
         {
-            if (sk == AES_KEY_LENGTH && sn == CCM_NONCE_LEN && sp == sc)
+            if (sk == AES_KEY_SIZE && sn == CCM_NONCE_LEN && sp == sc)
             {
                 n = ciphertest(key, iv, p, a, c, sp, sa, buffer);
                 fprintf(n ? ferr : fs, "%s\n", buffer); /* save the log */
@@ -137,7 +136,7 @@ int main()
         }
     }
     printf ("test cases: %d\nsuccessful: %d\nfailed encrypt: %d, failed decrypt: %d\n",
-        pass + ef + df, pass, ef, df);
+        pass + (ef > df ? ef : df), pass, ef, df);
 
     fclose(fp); fclose(fs); fclose(ferr);
     if (ef + df == 0)

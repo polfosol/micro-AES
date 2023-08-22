@@ -2,9 +2,9 @@
  ==============================================================================
  Name        : CMACtest.c
  Author      : polfosol
- Version     : 1.5.0.0
+ Version     : 1.5.1.1
  Copyright   : copyright © 2022 - polfosol
- Description : illustrating how the NIST's vectors for AES-CMAC are used
+ Description : illustrating how to validate NIST's vectors for AES-CMAC
  ==============================================================================
  */
 
@@ -13,41 +13,39 @@
 
 #define TESTFILEPATH "CMACGenAES128.rsp"
 
-static void str2bytes(const char* str, uint8_t* bytes)
-#define char2num(c)  (c > '9' ? (c & 7) + 9 : c & 0xF)
+static void str2bytes(const char* hex, uint8_t* bytes)
 {
-    size_t i, j;
-    for (i = 0, j = ~0; str[i]; ++i)
+    unsigned shl = 0;
+    for (--bytes; *hex; ++hex)
     {
-        if (str[i] < '0' || str[i] > 'f') continue;
-        if (j++ & 1) bytes[j / 2] = char2num(str[i]) << 4;
-        else bytes[j / 2] |= char2num(str[i]);
+        if (*hex < '0' || 'f' < *hex)  continue;
+        if ((shl ^= 4) != 0)  *++bytes = 0;
+        *bytes |= (*hex % 16 + (*hex > '9') * 9) << shl;
     }
 }
 
-static void bytes2str(const uint8_t* bytes, char* str, size_t len)
-#define num2char(x)  ((x) > 9 ? 'a' - 10 + (x) : '0' + (x))
+static void bytes2str(const uint8_t* bytes, char* str, const size_t len)
 {
-    size_t i, j;
-    for (i = 0, j = 0; i < len; ++i)
+    const char offset = 0x27;       /* offset must be 7 for uppercase */
+    size_t i = len + len, shr = 0;
+    for (str[i] = 0; i--; shr ^= 4)
     {
-        str[j++] = num2char(bytes[i] >> 4);
-        str[j++] = num2char(bytes[i] & 15);
+        str[i] = bytes[i / 2] >> shr & 0xF | '0';
+        if (str[i] > '9')  str[i] += offset;
     }
-    str[j] = 0;
 }
 
 static int ciphertest(uint8_t* key, uint8_t* d, uint8_t* m, size_t ds, size_t ms, char* r)
 {
-    char sk[2*AES_KEY_LENGTH + 8], smac[40], msg[30];
+    char sk[2*AES_KEY_SIZE + 1], smac[33], msg[30];
     uint8_t tmp[32], t = 0;
-    sprintf(msg, "%s", "success");
+    sprintf(msg, "%s", "passed the test");
 
     AES_CMAC(key, d, ds, tmp);
     t = memcmp(m, tmp, ms);
     if (t)  sprintf(msg, "%s", "failed");
 
-    bytes2str(key, sk, AES_KEY_LENGTH);
+    bytes2str(key, sk, AES_KEY_SIZE);
     bytes2str(m, smac, ms);
     sprintf(r, "%s\nK: %s\nmac: %s\n", msg, sk, smac);
     return t;
@@ -88,7 +86,7 @@ int main()
         {
         case 0:
             sk = strlen(value) / 2;
-            if (sk == AES_KEY_LENGTH) str2bytes(value, key);
+            if (sk == AES_KEY_SIZE) str2bytes(value, key);
             break;
         case 1:
             sd = strlen(value) / 2;
@@ -104,7 +102,7 @@ int main()
         }
         if (n == 2)
         {
-            if (sk == AES_KEY_LENGTH)
+            if (sk == AES_KEY_SIZE)
             {
                 n = ciphertest(key, d, m, sd, sm, buffer);
                 fprintf(n ? ferr : fs, "%s\n", buffer); /* save the log */

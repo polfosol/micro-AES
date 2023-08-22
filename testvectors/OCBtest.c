@@ -2,9 +2,9 @@
  ==============================================================================
  Name        : OCBtest.c
  Author      : polfosol
- Version     : 1.1.0.0
+ Version     : 1.1.1.1
  Copyright   : copyright © 2022 - polfosol
- Description : illustrating how the OpenSSL's vectors for AES-OCB mode are used
+ Description : illustrating how to validate OpenSSL's vectors for AES-OCB mode
  ==============================================================================
  */
 
@@ -13,36 +13,34 @@
 
 #define TESTFILEPATH "OCB_AES128.tv"
 
-static void str2bytes(const char* str, uint8_t* bytes)
-#define char2num(c)  (c > '9' ? (c & 7) + 9 : c & 0xF)
+static void str2bytes(const char* hex, uint8_t* bytes)
 {
-    size_t i, j;
-    for (i = 0, j = ~0; str[i]; ++i)
+    unsigned shl = 0;
+    for (--bytes; *hex; ++hex)
     {
-        if (str[i] < '0' || str[i] > 'f') continue;
-        if (j++ & 1) bytes[j / 2] = char2num(str[i]) << 4;
-        else bytes[j / 2] |= char2num(str[i]);
+        if (*hex < '0' || 'f' < *hex)  continue;
+        if ((shl ^= 4) != 0)  *++bytes = 0;
+        *bytes |= (*hex % 16 + (*hex > '9') * 9) << shl;
     }
 }
 
-static void bytes2str(const uint8_t* bytes, char* str, size_t len)
-#define num2char(x)  ((x) > 9 ? 'a' - 10 + (x) : '0' + (x))
+static void bytes2str(const uint8_t* bytes, char* str, const size_t len)
 {
-    size_t i, j;
-    for (i = 0, j = 0; i < len; ++i)
+    const char offset = 0x27;       /* offset must be 7 for uppercase */
+    size_t i = len + len, shr = 0;
+    for (str[i] = 0; i--; shr ^= 4)
     {
-        str[j++] = num2char(bytes[i] >> 4);
-        str[j++] = num2char(bytes[i] & 15);
+        str[i] = bytes[i / 2] >> shr & 0xF | '0';
+        if (str[i] > '9')  str[i] += offset;
     }
-    str[j] = 0;
 }
 
 static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* a, uint8_t* c,
-                      uint8_t np, uint8_t na, uint8_t err, char* r)
+                      size_t np, size_t na, uint8_t err, char* r)
 {
-    char sk[70], si[30], sp[0x100], sc[0x100], sa[0x100], msg[30];
+    char sk[2*AES_KEY_SIZE + 1], si[31], sp[0x100], sc[0x100], sa[0x100], msg[30];
     uint8_t tmp[0x90], t = 0;
-    sprintf(msg, "%s", "success");
+    sprintf(msg, "%s", "passed the test");
 
     AES_OCB_encrypt(key, iv, p, np, a, na, tmp, tmp + np);
     if (memcmp(c, tmp, np + OCB_TAG_LEN) && !err)
@@ -56,7 +54,7 @@ static int ciphertest(uint8_t* key, uint8_t* iv, uint8_t* p, uint8_t* a, uint8_t
     {
         sprintf(msg, "%sdecrypt failure", t & 1 ? "encrypt & " : "");
     }
-    bytes2str(key, sk, AES_KEY_LENGTH);
+    bytes2str(key, sk, AES_KEY_SIZE);
     bytes2str(iv, si, OCB_NONCE_LEN);
     bytes2str(p, sp, np);
     bytes2str(a, sa, na);
@@ -71,7 +69,7 @@ int main()
     { "Key = ", "IV = ", "AAD = ", "Plaintext = ", "Ciphertext = ", "Tag = ", "Result = " };
     char buffer[0x800], *value = "";
     size_t pass = 0, df = 0, ef = 0, sk = 0, sn = 0, sp = 0, sa = 0, st = 0;
-    uint8_t key[AES_KEY_LENGTH], tmp[AES_KEY_LENGTH], iv[OCB_NONCE_LEN];
+    uint8_t key[AES_KEY_SIZE], tmp[AES_KEY_SIZE], iv[OCB_NONCE_LEN];
     uint8_t i, p[0x80], c[0x90], a[0x80], t[16], rc = 1;
     FILE *fp, *fs, *ferr;
 
@@ -102,7 +100,7 @@ int main()
         {
         case 0:
             sk = strlen(value) / 2;
-            if (sk == AES_KEY_LENGTH) str2bytes(value, tmp);
+            if (sk == AES_KEY_SIZE) str2bytes(value, tmp);
             break;
         case 1:
             sn = strlen(value) / 2;
@@ -130,7 +128,7 @@ int main()
         }
         if (i == 0 || i > 7)
         {
-            if (!rc && sk == AES_KEY_LENGTH && sn == OCB_NONCE_LEN && st == OCB_TAG_LEN)
+            if (!rc && sk == AES_KEY_SIZE && sn == OCB_NONCE_LEN && st == OCB_TAG_LEN)
             {
                 memcpy(c + sp, t, st);   /* put tag at the end */
                 rc = ciphertest(key, iv, p, a, c, sp, sa, i, buffer);
@@ -147,7 +145,7 @@ int main()
         }
     }
     printf ("test cases: %d\nsuccessful: %d\nfailed encrypt: %d, failed decrypt: %d\n",
-        pass + ef + df, pass, ef, df);
+        pass + (ef > df ? ef : df), pass, ef, df);
 
     fclose(fp); fclose(fs); fclose(ferr);
     if (ef + df == 0)

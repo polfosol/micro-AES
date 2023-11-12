@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.h
  Author      : polfosol
- Version     : 9.9.8.4
+ Version     : 10
  Copyright   : copyright © 2022 - polfosol
  Description : μAES ™ is a minimalist all-in-one library for AES encryption
  ==============================================================================
@@ -459,7 +459,7 @@ The error codes and key length should be defined here for external references:
 #define ENCRYPTION_FAILURE       0x1E
 #define DECRYPTION_FAILURE       0x1D
 #define AUTHENTICATION_FAILURE   0x1A
-#define ENDED_IN_SUCCESS         0x00
+#define NO_ERROR_RETURNED        0x00
 
 #if (AES___ != 256) && (AES___ != 192)
 #define AES_KEY_SIZE   16

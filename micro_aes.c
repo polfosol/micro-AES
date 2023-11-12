@@ -414,16 +414,16 @@ static void copyLNum( block_t block, size_t num, uint8_t pos )
 #if CTR
 
 /** increment the value of a 128-bit counter block, regarding its endian-ness */
-static void incBlock( block_t block, uint8_t b )
+static void incBlock( block_t block, const char big )
 {
-    if (b)                                       /*  big-endian: inc the LSB, */
-    {                                            /*  ..until no overflow      */
-        for (b = LAST; !++block[b]; )  --b;
-        return;
-    }
-    while (!++block[b])                          /*  little-endian counter    */
+    uint8_t i;
+    if (big)                                     /*  big-endian counter       */
     {
-        if (++b == 4)  return;
+        for (i = LAST; !++block[i]; )  --i;      /*  increment the LSB,       */
+    }                                            /*  ..until no overflow      */
+    else
+    {
+        for (i = 0; !++block[i] && ++i < 4; );
     }
 }
 #endif
@@ -558,10 +558,10 @@ static void xMac( const void* data, const size_t dataSize,
         xorBlock( x, result );                   /* M_next = mix(seed, M ^ X) */
         mix( seed, result );
     }
-    for (n = dataSize % BLOCKSIZE; n--; )
+    for (n = dataSize % BLOCKSIZE; n--; )        /* if any partial block left */
     {
         result[n] ^= x[n];
-        if (!n)
+        if (n == 0)
         {
             mix( seed, result );
         }
@@ -581,9 +581,9 @@ static void cMac( const block_t D, const block_t Q,
     xMac( data, dataSize - s, mac, &rijndaelEncrypt, mac );
     if (s < BLOCKSIZE)
     {
-        mac[s] ^= 0x80;
+        mac[s] ^= 0x80;                          /*  pad( M; D, Q )           */
     }
-    xorBlock( s < BLOCKSIZE ? Q : D, mac );      /*  pad( M; D, Q )           */
+    xorBlock( s < BLOCKSIZE ? Q : D, mac );
     xMac( e, s + !s, mac, &rijndaelEncrypt, mac );
 }
 
@@ -676,7 +676,7 @@ char AES_ECB_decrypt( const uint8_t* key,
 
     /* if padding is enabled, check whether the result is properly padded. error
      * must be thrown if it's not. we skip this here and just check the size. */
-    return crtxtLen % BLOCKSIZE ? DECRYPTION_FAILURE : ENDED_IN_SUCCESS;
+    return crtxtLen % BLOCKSIZE ? DECRYPTION_FAILURE : NO_ERROR_RETURNED;
 }
 #endif /* ECB */
 
@@ -731,7 +731,7 @@ char AES_CBC_encrypt( const uint8_t* key, const block_t iVec,
         rijndaelEncrypt( y, y );
     }
     BURN( RoundKey );
-    return ENDED_IN_SUCCESS;
+    return NO_ERROR_RETURNED;
 }
 
 /**
@@ -776,7 +776,7 @@ char AES_CBC_decrypt( const uint8_t* key, const block_t iVec,
     BURN( RoundKey );
 
     /* note: if padding was applied, check whether output is properly padded. */
-    return ENDED_IN_SUCCESS;
+    return NO_ERROR_RETURNED;
 }
 #endif /* CBC */
 
@@ -914,7 +914,7 @@ static void CTR_Cipher( const block_t iCtr, const char big,
     memcpy( output, input, dataSize );           /* do in-place en/decryption */
     memcpy( c, iCtr, sizeof c );
 
-    if (big > 1)  incBlock( c, 1 );              /* pre-increment for CCM/GCM */
+    if (big > 1)  incBlock( c, big );            /* pre-increment for CCM/GCM */
 
     for (y = output; n--; y += BLOCKSIZE)
     {
@@ -1039,7 +1039,7 @@ char AES_XTS_encrypt( const uint8_t* keys, const uint8_t* tweak,
         xorBlock( T, c );
     }
     BURN( RoundKey );
-    return ENDED_IN_SUCCESS;
+    return NO_ERROR_RETURNED;
 }
 
 /**
@@ -1077,7 +1077,7 @@ char AES_XTS_decrypt( const uint8_t* keys, const uint8_t* tweak,
     xorBlock( T, p );
 
     BURN( RoundKey );
-    return ENDED_IN_SUCCESS;
+    return NO_ERROR_RETURNED;
 }
 #endif /* XTS */
 
@@ -1193,7 +1193,7 @@ char AES_GCM_decrypt( const uint8_t* key, const uint8_t* nonce,
     }
     CTR_Cipher( iv, 2, crtxt, crtxtLen, pntxt );
     BURN( RoundKey );
-    return ENDED_IN_SUCCESS;
+    return NO_ERROR_RETURNED;
 }
 #endif /* GCM */
 
@@ -1296,7 +1296,7 @@ char AES_CCM_decrypt( const uint8_t* key, const uint8_t* nonce,
         SABOTAGE( pntxt, crtxtLen );
         return AUTHENTICATION_FAILURE;
     }
-    return ENDED_IN_SUCCESS;
+    return NO_ERROR_RETURNED;
 }
 #endif /* CCM */
 
@@ -1312,20 +1312,20 @@ static void S2V( const uint8_t* key,
                  const size_t aDataLen, const size_t ptextLen, block_t IV )
 {
     block_t K[2], Y;
-    uint8_t r = ptextLen % BLOCKSIZE, *D = K[0], *Q = K[1];
+    uint8_t r = ptextLen % BLOCKSIZE, *Q = K[1];
 
     memset( *K, 0, BLOCKSIZE );
     memset( IV, 0, BLOCKSIZE );                  /*  initialize/clear IV      */
-    getSubkeys( &doubleBGF128, 1, key, D, Q );
-    rijndaelEncrypt( D, Y );                     /*  Y_0 = CMAC(zero block)   */
+    getSubkeys( &doubleBGF128, 1, key, *K, Q );
+    rijndaelEncrypt( *K, Y );                    /*  Y_0 = CMAC(zero block)   */
 
     /* in case of multiple AAD units, each must be handled the same way as this.
      * e.g. let aData be a 2D array and aDataLen a null-terminated one. then the
      * following three lines starting with `if (aDataLen)` can be replaced by:
-     * for (i = 0; *aDataLen; ++i) { cMac( D, Q, aData[i], *aDataLen++, IV ); */
+     * for (i = 0; *aDataLen; ) { cMac( *K, Q, aData[i++], *aDataLen++, IV ); */
     if (aDataLen)
     {
-        cMac( D, Q, aData, aDataLen, IV );
+        cMac( *K, Q, aData, aDataLen, IV );
         doubleBGF128( Y );                       /*  Y_$ = double( Y_{i-1} )  */
         xorBlock( IV, Y );                       /*  Y_i = Y_$ ^ CMAC(AAD_i)  */
         memset( IV, 0, BLOCKSIZE );
@@ -1337,10 +1337,10 @@ static void S2V( const uint8_t* key,
     }
     if (r)
     {
-        memset( D, 0, BLOCKSIZE );
+        memset( *K, 0, BLOCKSIZE );
     }
-    xorBlock( Y, D + r );
-    cMac( D, D, pntxt, ptextLen - r, IV );       /*  CMAC*( Y  xor_end  M )   */
+    xorBlock( Y, *K + r );
+    cMac( *K, *K, pntxt, ptextLen - r, IV );     /*  CMAC*( Y  xor_end  M )   */
     if (r)
     {
         cMac( NULL, Q, (const char*) pntxt + ptextLen - r, r, IV );
@@ -1402,7 +1402,7 @@ char AES_SIV_decrypt( const uint8_t* keys, const block_t iv,
         SABOTAGE( pntxt, crtxtLen );
         return AUTHENTICATION_FAILURE;
     }
-    return ENDED_IN_SUCCESS;
+    return NO_ERROR_RETURNED;
 }
 #endif /* SIV */
 
@@ -1514,7 +1514,7 @@ char GCM_SIV_decrypt( const uint8_t* key, const uint8_t* nonce,
         SABOTAGE( pntxt, crtxtLen );
         return AUTHENTICATION_FAILURE;
     }
-    return ENDED_IN_SUCCESS;
+    return NO_ERROR_RETURNED;
 }
 #endif /* GCM-SIV */
 
@@ -1640,22 +1640,22 @@ char AES_EAX_decrypt( const uint8_t* key, const uint8_t* nonce,
     CTR_Cipher( mac, 1, crtxt, crtxtLen, pntxt );
 
     BURN( RoundKey );
-    return ENDED_IN_SUCCESS;
+    return NO_ERROR_RETURNED;
 }
 #endif /* EAX */
 
 
 /*----------------------------------------------------------------------------*\
-        OCB-AES (offset codebook mode): how to parallelize the algorithm
-                by independent calculation of the offset values
-                 + auxiliary functions along with the main API
+        OCB-AES (offset codebook mode): auxiliary functions and main API
+              + demonstrating how to parallelize the algorithm by
+                  independent calculation of the offset values
 \*----------------------------------------------------------------------------*/
 #if IMPLEMENT(OCB)
 
 static block_t OCBsubkeys[4];                    /*  [L_$] [L_*] [Ktop] [Δ_n] */
 
 /** Calculate the offset block (Δ_i) at a specified index, given the initial Δ_0
- * and L$ blocks. This method has minimum memory usage, but it's clearly slow */
+ * and L$ blocks. This method has minimum memory usage, but it might be slow. */
 static void getDelta( const count_t index, block_t delta )
 {
     size_t m, b = 1;
@@ -1807,7 +1807,7 @@ char AES_OCB_decrypt( const uint8_t* key, const uint8_t* nonce,
         BURN( OCBsubkeys );
         return AUTHENTICATION_FAILURE;
     }
-    return ENDED_IN_SUCCESS;
+    return NO_ERROR_RETURNED;
 }
 #endif /* OCB */
 
@@ -1828,7 +1828,7 @@ char AES_OCB_decrypt( const uint8_t* key, const uint8_t* nonce,
 char AES_KEY_wrap( const uint8_t* kek,
                    const uint8_t* secret, const size_t secretLen, uint8_t* wrapped )
 {
-    size_t q, i = 0, n = secretLen / HB;         /*  number of semi-blocks    */
+    size_t i, n = secretLen / HB;                /*  number of semi-blocks    */
     block_t A;
 
     if (n < 2 || secretLen % HB)  return ENCRYPTION_FAILURE;
@@ -1837,7 +1837,7 @@ char AES_KEY_wrap( const uint8_t* kek,
     memcpy( wrapped + HB, secret, secretLen );   /*  copy input to the output */
     AES_SetKey( kek );
 
-    for (q = 6 * n; i < q; )
+    for (i = 0; i < 6 * n; )
     {
         uint8_t *r = wrapped + (i++ % n + 1) * HB;
         memcpy( A + HB, r, HB );
@@ -1848,7 +1848,7 @@ char AES_KEY_wrap( const uint8_t* kek,
     BURN( RoundKey );
 
     memcpy( wrapped, A, HB );
-    return ENDED_IN_SUCCESS;
+    return NO_ERROR_RETURNED;
 }
 
 /**
@@ -1883,7 +1883,7 @@ char AES_KEY_unwrap( const uint8_t* kek,
 
     for (n = 0; i < HB; )  n |= A[i++] ^ 0xA6;   /*  authenticate/error check */
 
-    return n ? AUTHENTICATION_FAILURE : ENDED_IN_SUCCESS;
+    return n ? AUTHENTICATION_FAILURE : NO_ERROR_RETURNED;
 }
 #endif /* KWA */
 
@@ -2315,7 +2315,7 @@ char AES_FPE_encrypt( const uint8_t* key, const uint8_t* tweak,
 #endif
     FPEfinalize( index, ptextLen, crtxt );
     free( index );
-    return ENDED_IN_SUCCESS;
+    return NO_ERROR_RETURNED;
 }
 
 /**
@@ -2344,6 +2344,6 @@ char AES_FPE_decrypt( const uint8_t* key, const uint8_t* tweak,
 #endif
     FPEfinalize( index, crtxtLen, pntxt );
     free( index );
-    return ENDED_IN_SUCCESS;
+    return NO_ERROR_RETURNED;
 }
 #endif /* FPE */

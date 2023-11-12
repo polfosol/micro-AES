@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_fpe.h
  Author      : polfosol
- Version     : 2.1.1.2
+ Version     : 2.1.2.0
  Copyright   : copyright © 2022 - polfosol
  Description : demonstrating some sample alphabets for the FPE mode of μAES ™
  ==============================================================================
@@ -24,16 +24,16 @@
  * These strings are commonly used in ASCII-based alphabets. The declaration of
  * an alphabet must be followed by its number of characters (RADIX).
  */
-#define DECDIGIT  "0123456789"
-#define LCLETTER  "abcdefghijklmnopqrstuvwxyz"
-#define UCLETTER  "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-#define HEXDIGIT  DECDIGIT "ABCDEFabcdef"
+#define DECIMALS  "0123456789"
+#define LLETTERS  "abcdefghijklmnopqrstuvwxyz"
+#define ULETTERS  "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+#define HEXCHARS  DECIMALS "ABCDEFabcdef"
 
 /**
  numbers
  */
 #if CUSTOM_ALPHABET == 0
-#define ALPHABET  DECDIGIT
+#define ALPHABET  DECIMALS
 #define RADIX     10
 #endif
 
@@ -49,7 +49,7 @@
  lowercase english words
  */
 #if CUSTOM_ALPHABET == 2
-#define ALPHABET  LCLETTER
+#define ALPHABET  LLETTERS
 #define RADIX     26
 #endif
 
@@ -57,7 +57,7 @@
  lowercase alphanumeric strings
  */
 #if CUSTOM_ALPHABET == 3
-#define ALPHABET  DECDIGIT LCLETTER
+#define ALPHABET  DECIMALS LLETTERS
 #define RADIX     36
 #endif
 
@@ -65,7 +65,7 @@
  the English alphabet
  */
 #if CUSTOM_ALPHABET == 4
-#define ALPHABET  UCLETTER LCLETTER
+#define ALPHABET  ULETTERS LLETTERS
 #define RADIX     52
 #endif
 
@@ -73,7 +73,7 @@
  base-64 encoded strings (RFC-4648), with no padding character
  */
 #if CUSTOM_ALPHABET == 5
-#define ALPHABET  UCLETTER LCLETTER DECDIGIT "+/"
+#define ALPHABET  ULETTERS LLETTERS DECIMALS "+/"
 #define RADIX     64
 #endif
 
@@ -81,7 +81,7 @@
  base-85 encoded strings (RFC-1924)
  */
 #if CUSTOM_ALPHABET == 6
-#define ALPHABET  DECDIGIT UCLETTER LCLETTER "!#$%&()*+-;<=>?@^_`{|}~"
+#define ALPHABET  DECIMALS ULETTERS LLETTERS "!#$%&()*+-;<=>?@^_`{|}~"
 #define RADIX     85
 #endif
 
@@ -89,7 +89,7 @@
  a character set with length 26, used by some test vectors
  */
 #if CUSTOM_ALPHABET == 7
-#define ALPHABET  DECDIGIT "abcdefghijklmnop"
+#define ALPHABET  DECIMALS "abcdefghijklmnop"
 #define RADIX     26
 #endif
 
@@ -97,7 +97,7 @@
  base-64 character set with DIFFERENT ORDERING, used by some test vectors
  */
 #if CUSTOM_ALPHABET == 8
-#define ALPHABET  DECDIGIT UCLETTER LCLETTER "+/"
+#define ALPHABET  DECIMALS ULETTERS LLETTERS "+/"
 #define RADIX     64
 #endif
 
@@ -105,7 +105,7 @@
  all printable ascii characters
  */
 #if CUSTOM_ALPHABET == 9
-#define ALPHABET  " !\"#$%&\'()*+,-./"DECDIGIT":;<=>?@"UCLETTER"[\\]^_`"LCLETTER"{|}~"
+#define ALPHABET  " !\"#$%&\'()*+,-./"DECIMALS":;<=>?@"ULETTERS"[\\]^_`"LLETTERS"{|}~"
 #define RADIX     95
 #endif
 
@@ -146,7 +146,7 @@
  * set it as a constant, or let it be calculated dynamically like this:
  */
 #include <math.h>
-#define LOGRDX  (log( RADIX ) / log( 2 ))        /*  log2( RADIX ) if std=C99 */
+#define LOGRDX  (log( RADIX ) / log( 2 ))        /* log2(RADIX) if std >= C99 */
 #if FF_X == 3
 #define MAXLEN  (2 * (int) (96.000001 / LOGRDX))
 #endif

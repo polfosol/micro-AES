@@ -28,9 +28,7 @@ static const char
     *ecbcipher = "af1893f0fbb09a43 7f6b0fd4f4977890 7bb85cccf1e9d2e3 ebe5bae935107868"
                  "c6d72cb2ca375c12 ce6b6b1141141fd0 d268d14db351d680 5aabb99427341da9",
     *k_wrapped = "031D33264E15D332 68F24EC260743EDC E1C6C7DDEE725A93 6BA814915C6762D2";
-#else                                     /*  ↓↓↓↓  zero-padded input */
-    *ecbcipher = "5d00c273f8b2607d a834632dcbb521f4 697dd4ab20bb0645 32a6545e24e33ae9"
-                 "f545176111f93773 dbecd262841cf83b 10d145e71b772cf7 a12889cda84be795",
+#else                                     /*  AES-128, sizeof key =16 */
 #if CTS
     *cbccipher = "65c48fdf9fbd6261 28f2d8bac3f71251 75e7f4821fda0263 70011632779d7403"
                  "c119ef461ac4e1bc 8a7e36bf92b3b3d1 7e9e2d298e154bc4 2d",
@@ -38,6 +36,8 @@ static const char
     *cbccipher = "65c48fdf9fbd6261 28f2d8bac3f71251 75e7f4821fda0263 70011632779d7403"
                  "7e9e2d298e154bc4 2dc7a9bc419b915d c119ef461ac4e1bc 8a7e36bf92b3b3d1",
 #endif
+    *ecbcipher = "5d00c273f8b2607d a834632dcbb521f4 697dd4ab20bb0645 32a6545e24e33ae9"
+                 "f545176111f93773 dbecd262841cf83b 10d145e71b772cf7 a12889cda84be795",
     *xtscipher = "10f9301a157bfceb 3eb9e7bd38500b7e 959e21ba3cc1179a d7f7d7d99460e695"
                  "5e8bcb177571c719 6de58ff28c381913 e7c82d0adfd90c45 ca",
     *cfbcipher = "edab3105e673bc9e b9102539a9f457bc 245c14e1bff81b5b 4a4a147c988cb0a6"

@@ -2,7 +2,7 @@
  * Since µAES code is optimized for 8-bit CPUs, it might be much less efficient
  * for a 32-bit machine. We can apply a few tweaks, especially in the process of
  * mixing columns, to boost its performance on such systems. For example, here's
- * a piece of code to replace the lines #83 to #131 of "micro_aes.c" source file
+ * a piece of code to replace the lines #83 to #130 of "micro_aes.c" source file
  * —starting with `#if DONT_USE_FUNCTIONS`. The endian-ness of system is crucial
  * and must be determined by appropriate macros, e.g. let BIG_ENDIAN_INTEGERS be
  * FALSE when compiling for a little-endian system and TRUE otherwise. Note that

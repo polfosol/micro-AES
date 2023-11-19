@@ -119,7 +119,7 @@ int main()
     hex2bytes(secretKey, authKey);
     hex2bytes(iVec, iv);
     hex2bytes(plainText, input);
-#if M_RIJNDAEL
+#if MICRO_RJNDL
     hex2bytes(iVec, input + 48);
     hex2bytes(secondKey, test);
     a = AES_KEY_SIZE == 16 ? key : input + (AES___ - 192) / 2;

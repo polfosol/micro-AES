@@ -69,7 +69,7 @@ AES block-cipher modes of operation. The following modes can be enabled/disabled
 #endif
 
 #define WTF ! (BLOCKCIPHERS | AEAD_MODES)
-#define M_RIJNDAEL   WTF   /* none of above; just rijndael API. dude.., why?  */
+#define MICRO_RJNDL  WTF   /* none of above; just rijndael API. dude.., why?  */
 
 /**----------------------------------------------------------------------------
 Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
@@ -79,7 +79,7 @@ Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
 #define AES_PADDING     0  /* standard values: (1) PKCS#7  (2) ISO/IEC7816-4  */
 #endif
 
-#if ECB || CBC || XEX || KWA || M_RIJNDAEL
+#if ECB || CBC || XEX || KWA || MICRO_RJNDL
 #define DECRYPTION      1  /* rijndael decryption is NOT required otherwise.  */
 #endif
 
@@ -136,7 +136,7 @@ extern "C" {
 /**----------------------------------------------------------------------------
 Encryption/decryption of a single block with Rijndael
  -----------------------------------------------------------------------------*/
-#if M_RIJNDAEL
+#if MICRO_RJNDL
 void AES_Cipher( const uint8_t* key,          /* encryption/decryption key    */
                  const char mode,             /* encrypt: 'E', decrypt: 'D'   */
                  const uint8_t x[16],         /* input bytes (or input block) */

@@ -28,7 +28,7 @@ static const char
     *ecbcipher = "af1893f0fbb09a43 7f6b0fd4f4977890 7bb85cccf1e9d2e3 ebe5bae935107868"
                  "c6d72cb2ca375c12 ce6b6b1141141fd0 d268d14db351d680 5aabb99427341da9",
     *k_wrapped = "031D33264E15D332 68F24EC260743EDC E1C6C7DDEE725A93 6BA814915C6762D2";
-#else                                     /*  AES-128, sizeof key =16 */
+#else                                     /*  AES-128, sizeof key=16: */
 #if CTS
     *cbccipher = "65c48fdf9fbd6261 28f2d8bac3f71251 75e7f4821fda0263 70011632779d7403"
                  "c119ef461ac4e1bc 8a7e36bf92b3b3d1 7e9e2d298e154bc4 2d",
@@ -66,7 +66,7 @@ static const char
     *gsvcipher = "2f1488496ada3f70 9760420ac72e5acf a977f6add4c55ac6 85f1b9dff8f381e0"
                  "2a64bbdd64cdd778 525462949bb0b141 db908c5cfa365750 3666f879ac879fcb"
                  "f25c15d496a1e6f7 f8",
-#if EAXP                                  /*  ↓↓↓↓  with 4 bytes tag  */
+#if EAXP                                  /*  ↓↓↓↓  with a 32-bit tag */
     *eaxcipher = "f516e9c20069292c c51ba8b6403ddedf 5a34798f62187f58 d723fa33573fd80b"
                  "f08ffbb09dadbd0b 6fa4812ca4bb5e6d db9a384943b36690 e81738a7a1",
 #else                                     /*  ↓↓↓↓  with 16 bytes tag */
@@ -75,12 +75,12 @@ static const char
                  "986810a504f01ec6 02",
 #endif                                    /*  ↓↓ a large Prime Number */
     *fpe_plain = "122333444455555666666777777788888888999999999012345682747",
-#if FF_X == 3                             /*  <-- MAXLEN=56 if RDX=10 */
+#if FF_X == 3                             /*  ↓ MAXLEN=56 if RADIX=10 */
     *fpecipher = "0053317760589559020399280014720716878020198371161819152",
 #else
     *fpecipher = "000260964766881620856103152534002821752468680082944565411",
 #endif
-    *ptextcmac = "b887df1fd8c239c3 e8a64d9822e21128",
+    *ptxt_cmac = "b887df1fd8c239c3 e8a64d9822e21128",
     *poly_1305 = "3175bed9bd01821a 62d4c7bef26722be",
     *k_wrapped = "1FA68B0A8112B447 AEF34BD8FB5A7B82 9D3E862371D2CFE5";
 #endif
@@ -110,7 +110,7 @@ static void check(const char* method, void* result, const void* expected, size_t
     memset(result, 0xcc, TAGGED);
 }
 
-int main()
+int main(void)
 {
     uint8_t iv[16], key[64], authKey[32], input[PADDED], test[TAGGED], output[TAGGED],
            *a = authKey + 1, sa = sizeof authKey - 1, sp = PBYTES;
@@ -119,7 +119,7 @@ int main()
     hex2bytes(secretKey, authKey);
     hex2bytes(iVec, iv);
     hex2bytes(plainText, input);
-#if M_RIJNDAEL
+#if MICRO_RJNDL
     hex2bytes(iVec, input + 48);
     hex2bytes(secondKey, test);
     a = AES_KEY_SIZE == 16 ? key : input + (AES___ - 192) / 2;
@@ -177,7 +177,7 @@ int main()
     check("XTS decryption", output, input, sp);
 #endif
 #if CMAC && AES_KEY_SIZE == 16
-    hex2bytes(ptextcmac, test);
+    hex2bytes(ptxt_cmac, test);
     AES_CMAC(key, input, sp, output);
     check("plaintext CMAC", output, test, 16);
 #endif

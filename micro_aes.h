@@ -69,7 +69,7 @@ AES block-cipher modes of operation. The following modes can be enabled/disabled
 #endif
 
 #define WTF ! (BLOCKCIPHERS | AEAD_MODES)
-#define M_RIJNDAEL   WTF   /* none of above; just rijndael API. dude.., why?  */
+#define MICRO_RJNDL  WTF   /* none of above; just rijndael API. dude.., why?  */
 
 /**----------------------------------------------------------------------------
 Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
@@ -79,7 +79,7 @@ Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
 #define AES_PADDING     0  /* standard values: (1) PKCS#7  (2) ISO/IEC7816-4  */
 #endif
 
-#if ECB || CBC || XEX || KWA || M_RIJNDAEL
+#if ECB || CBC || XEX || KWA || MICRO_RJNDL
 #define DECRYPTION      1  /* rijndael decryption is NOT required otherwise.  */
 #endif
 
@@ -136,7 +136,7 @@ extern "C" {
 /**----------------------------------------------------------------------------
 Encryption/decryption of a single block with Rijndael
  -----------------------------------------------------------------------------*/
-#if M_RIJNDAEL
+#if MICRO_RJNDL
 void AES_Cipher( const uint8_t* key,          /* encryption/decryption key    */
                  const char mode,             /* encrypt: 'E', decrypt: 'D'   */
                  const uint8_t x[16],         /* input bytes (or input block) */
@@ -148,14 +148,14 @@ Main functions for ECB-AES block ciphering
  -----------------------------------------------------------------------------*/
 #if ECB
 void AES_ECB_encrypt( const uint8_t* key,     /* encryption key               */
-                      const uint8_t* pntxt,   /* plaintext buffer             */
+                      const void* pntxt,      /* plaintext buffer             */
                       const size_t ptextLen,  /* length of input plain text   */
-                      uint8_t* crtxt );       /* cipher-text result           */
+                      void* crtxt );          /* cipher-text result           */
 
 char AES_ECB_decrypt( const uint8_t* key,     /* decryption key               */
-                      const uint8_t* crtxt,   /* cipher-text buffer           */
+                      const void* crtxt,      /* cipher-text buffer           */
                       const size_t crtxtLen,  /* length of input cipher text  */
-                      uint8_t* pntxt );       /* plaintext result             */
+                      void* pntxt );          /* plaintext result             */
 #endif /* ECB */
 
 /**----------------------------------------------------------------------------
@@ -164,15 +164,15 @@ Main functions for CBC-AES block ciphering
 #if CBC
 char AES_CBC_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t iVec[16], /* initialization vector        */
-                      const uint8_t* pntxt,   /* plaintext buffer             */
+                      const void* pntxt,      /* plaintext buffer             */
                       const size_t ptextLen,  /* length of input plain text   */
-                      uint8_t* crtxt );       /* cipher-text result           */
+                      void* crtxt );          /* cipher-text result           */
 
 char AES_CBC_decrypt( const uint8_t* key,     /* decryption key               */
                       const uint8_t iVec[16], /* initialization vector        */
-                      const uint8_t* crtxt,   /* cipher-text buffer           */
+                      const void* crtxt,      /* cipher-text buffer           */
                       const size_t crtxtLen,  /* length of input cipher text  */
-                      uint8_t* pntxt );       /* plaintext result             */
+                      void* pntxt );          /* plaintext result             */
 #endif /* CBC */
 
 /**----------------------------------------------------------------------------
@@ -181,15 +181,15 @@ Main functions for CFB-AES block ciphering
 #if CFB
 void AES_CFB_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t iVec[16], /* initialization vector        */
-                      const uint8_t* pntxt,   /* plaintext buffer             */
+                      const void* pntxt,      /* plaintext buffer             */
                       const size_t ptextLen,  /* length of input plain text   */
-                      uint8_t* crtxt );       /* cipher-text result           */
+                      void* crtxt );          /* cipher-text result           */
 
 void AES_CFB_decrypt( const uint8_t* key,     /* decryption key               */
                       const uint8_t iVec[16], /* initialization vector        */
-                      const uint8_t* crtxt,   /* cipher-text buffer           */
+                      const void* crtxt,      /* cipher-text buffer           */
                       const size_t crtxtLen,  /* length of input cipher text  */
-                      uint8_t* pntxt );       /* plaintext result             */
+                      void* pntxt );          /* plaintext result             */
 #endif /* CFB */
 
 /**----------------------------------------------------------------------------
@@ -198,15 +198,15 @@ Main functions for OFB-AES block ciphering
 #if OFB
 void AES_OFB_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t iVec[16], /* initialization vector        */
-                      const uint8_t* pntxt,   /* plaintext buffer             */
+                      const void* pntxt,      /* plaintext buffer             */
                       const size_t ptextLen,  /* length of input plain text   */
-                      uint8_t* crtxt );       /* cipher-text result           */
+                      void* crtxt );          /* cipher-text result           */
 
 void AES_OFB_decrypt( const uint8_t* key,     /* decryption key               */
                       const uint8_t iVec[16], /* initialization vector        */
-                      const uint8_t* crtxt,   /* cipher-text buffer           */
+                      const void* crtxt,      /* cipher-text buffer           */
                       const size_t crtxtLen,  /* length of input cipher text  */
-                      uint8_t* pntxt );       /* plaintext result             */
+                      void* pntxt );          /* plaintext result             */
 #endif /* OFB */
 
 /**----------------------------------------------------------------------------
@@ -232,15 +232,15 @@ Main functions for CTR-AES block ciphering
 #if CTR_NA
 void AES_CTR_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t* iv,      /* initialization vector/ nonce */
-                      const uint8_t* pntxt,   /* plaintext buffer             */
+                      const void* pntxt,      /* plaintext buffer             */
                       const size_t ptextLen,  /* length of input plain text   */
-                      uint8_t* crtxt );       /* cipher-text result           */
+                      void* crtxt );          /* cipher-text result           */
 
 void AES_CTR_decrypt( const uint8_t* key,     /* decryption key               */
                       const uint8_t* iv,      /* initialization vector/ nonce */
-                      const uint8_t* crtxt,   /* cipher-text buffer           */
+                      const void* crtxt,      /* cipher-text buffer           */
                       const size_t crtxtLen,  /* length of input cipher text  */
-                      uint8_t* pntxt );       /* plaintext result             */
+                      void* pntxt );          /* plaintext result             */
 #endif /* CTR */
 
 /**----------------------------------------------------------------------------
@@ -461,10 +461,10 @@ The error codes and key length should be defined here for external references:
 #define AUTHENTICATION_FAILURE   0x1A
 #define NO_ERROR_RETURNED        0x00
 
-#if (AES___ != 256) && (AES___ != 192)
-#define AES_KEY_SIZE   16
+#if AES___ == 0x100 || AES___ == 0xC0
+#define AES_KEY_SIZE  (AES___ >> 3)
 #else
-#define AES_KEY_SIZE   (AES___ / 8)
+#define AES_KEY_SIZE   16
 #endif
 
 #endif /* header guard */

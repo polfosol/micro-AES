@@ -2,7 +2,7 @@
 <CodeBlocks_project_file>
 	<FileVersion major="1" minor="6" />
 	<Project>
-		<Option title="GCMTest" />
+		<Option title="testvectors" />
 		<Option pch_mode="2" />
 		<Option compiler="gcc" />
 		<Build>
@@ -12,9 +12,9 @@
 				<Option type="1" />
 				<Option compiler="gcc" />
 				<Compiler>
+					<Add option="-std=c90" />
 					<Add option="-pedantic" />
 					<Add option="-g" />
-					<Add option="-ansi" />
 				</Compiler>
 			</Target>
 			<Target title="Release">
@@ -23,22 +23,31 @@
 				<Option type="1" />
 				<Option compiler="gcc" />
 				<Compiler>
-					<Add option="-O2" />
+					<Add option="-std=c90" />
 					<Add option="-pedantic" />
-					<Add option="-ansi" />
+					<Add option="-O3" />
 				</Compiler>
 				<Linker>
 					<Add option="-s" />
 				</Linker>
 			</Target>
 		</Build>
+		<Unit filename="aes_testvectors.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="../micro_aes.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="../micro_aes.h" />
-		<Unit filename="GCMtest.c">
-			<Option compilerVar="CC" />
-		</Unit>
+		<Unit filename="aes_testvectors.h" />
+		<Unit filename="aes_testvectors_CCM.h" />
+		<Unit filename="aes_testvectors_CMAC.h" />
+		<Unit filename="aes_testvectors_FPE.h" />
+		<Unit filename="aes_testvectors_GCM.h" />
+		<Unit filename="aes_testvectors_GCMSIV.h" />
+		<Unit filename="aes_testvectors_OCB.h" />
+		<Unit filename="aes_testvectors_POLY1305.h" />
+		<Unit filename="aes_testvectors_XTS.h" />
 		<Extensions>
 			<lib_finder disable_auto="1" />
 		</Extensions>

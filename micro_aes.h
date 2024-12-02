@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.h
  Author      : polfosol
- Version     : 9.9.8.4
+ Version     : 10
  Copyright   : copyright © 2022 - polfosol
  Description : μAES ™ is a minimalist all-in-one library for AES encryption
  ==============================================================================
@@ -65,27 +65,30 @@ AES block-cipher modes of operation. The following modes can be enabled/disabled
 #endif
 
 #if EAX
-#define EAXP         1     /* EAX-prime, as specified by IEEE Std 1703        */
+#define EAXP         0     /* EAX-prime, as specified by IEEE Std 1703        */
 #endif
 
 #define WTF ! (BLOCKCIPHERS | AEAD_MODES)
-#define M_RIJNDAEL   WTF   /* none of above; just rijndael API. dude.., why?  */
+#define MICRO_RJNDL  WTF   /* none of above; just rijndael API. dude.., why?  */
 
 /**----------------------------------------------------------------------------
-Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
+Refer to the bottom of this document for more information about these macros:
  -----------------------------------------------------------------------------*/
 
 #if ECB || (CBC && !CTS) || (XEX && !XTS)
 #define AES_PADDING     0  /* standard values: (1) PKCS#7  (2) ISO/IEC7816-4  */
 #endif
 
-#if ECB || CBC || XEX || KWA || M_RIJNDAEL
+#if ECB || CBC || XEX || KWA || MICRO_RJNDL
 #define DECRYPTION      1  /* rijndael decryption is NOT required otherwise.  */
 #endif
 
 #if FPE
 #define CUSTOM_ALPHABET 0  /* if disabled, use default alphabet (digits 0..9) */
 #define FF_X            1  /* algorithm type:  (1) for FF1, or (3) for FF3-1  */
+#if FF_X == 3
+#define FF3_TWEAK_LEN   7  /* if the old version of FF3: (8), else FF3-1: (7) */
+#endif
 #endif
 
 #if CTR_NA
@@ -115,18 +118,24 @@ Refer to the BOTTOM OF THIS DOCUMENT for some explanations about these macros:
 Since <stdint.h> is not a part of ANSI-C, we may need a 'trick' to use uint8_t
  -----------------------------------------------------------------------------*/
 #include <string.h>
-#if __STDC_VERSION__ > 199900L || __cplusplus > 201100L || defined(_MSC_VER)
-#include <stdint.h>
-#else
 #include <limits.h>
-#if CHAR_BIT == 8
+#ifdef  LLONG_MAX          /* which means compiler conforms to C99 standard.  */
+#include <stdint.h>
+#elif   CHAR_BIT == 8
 typedef unsigned char  uint8_t;
-#endif
 #if INT_MAX > 200000L
 typedef int   int32_t;
 #else
 typedef long  int32_t;
 #endif
+#else
+#error "YOUR SYSTEM/COMPILER NEITHER SUPPORTS <cstdint> NOR 8-BIT CHARACTERS!!"
+#endif
+
+#ifdef __SDCC              /* compiler is SDCC (small-device C compiler)      */
+#define SDCC_REENT  __reentrant
+#else
+#define SDCC_REENT
 #endif
 
 #ifdef __cplusplus
@@ -136,10 +145,10 @@ extern "C" {
 /**----------------------------------------------------------------------------
 Encryption/decryption of a single block with Rijndael
  -----------------------------------------------------------------------------*/
-#if M_RIJNDAEL
+#if MICRO_RJNDL
 void AES_Cipher( const uint8_t* key,          /* encryption/decryption key    */
                  const char mode,             /* encrypt: 'E', decrypt: 'D'   */
-                 const uint8_t x[16],         /* input bytes (or input block) */
+                 const uint8_t x[16],         /* input array (or input block) */
                  uint8_t y[16] );             /* output block                 */
 #endif
 
@@ -148,14 +157,14 @@ Main functions for ECB-AES block ciphering
  -----------------------------------------------------------------------------*/
 #if ECB
 void AES_ECB_encrypt( const uint8_t* key,     /* encryption key               */
-                      const uint8_t* pntxt,   /* plaintext buffer             */
-                      const size_t ptextLen,  /* length of input plain text   */
-                      uint8_t* crtxt );       /* cipher-text result           */
+                      const void* pntxt,      /* plaintext input              */
+                      const size_t ptextLen,  /* length of plaintext          */
+                      void* crtxt );          /* ciphertext result            */
 
 char AES_ECB_decrypt( const uint8_t* key,     /* decryption key               */
-                      const uint8_t* crtxt,   /* cipher-text buffer           */
-                      const size_t crtxtLen,  /* length of input cipher text  */
-                      uint8_t* pntxt );       /* plaintext result             */
+                      const void* crtxt,      /* ciphertext input             */
+                      const size_t crtxtLen,  /* length of ciphertext         */
+                      void* pntxt );          /* plaintext result             */
 #endif /* ECB */
 
 /**----------------------------------------------------------------------------
@@ -164,15 +173,15 @@ Main functions for CBC-AES block ciphering
 #if CBC
 char AES_CBC_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t iVec[16], /* initialization vector        */
-                      const uint8_t* pntxt,   /* plaintext buffer             */
-                      const size_t ptextLen,  /* length of input plain text   */
-                      uint8_t* crtxt );       /* cipher-text result           */
+                      const void* pntxt,      /* plaintext input              */
+                      const size_t ptextLen,  /* length of plaintext          */
+                      void* crtxt );          /* ciphertext result            */
 
 char AES_CBC_decrypt( const uint8_t* key,     /* decryption key               */
                       const uint8_t iVec[16], /* initialization vector        */
-                      const uint8_t* crtxt,   /* cipher-text buffer           */
-                      const size_t crtxtLen,  /* length of input cipher text  */
-                      uint8_t* pntxt );       /* plaintext result             */
+                      const void* crtxt,      /* ciphertext input             */
+                      const size_t crtxtLen,  /* length of ciphertext         */
+                      void* pntxt );          /* plaintext result             */
 #endif /* CBC */
 
 /**----------------------------------------------------------------------------
@@ -181,15 +190,15 @@ Main functions for CFB-AES block ciphering
 #if CFB
 void AES_CFB_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t iVec[16], /* initialization vector        */
-                      const uint8_t* pntxt,   /* plaintext buffer             */
-                      const size_t ptextLen,  /* length of input plain text   */
-                      uint8_t* crtxt );       /* cipher-text result           */
+                      const void* pntxt,      /* plaintext input              */
+                      const size_t ptextLen,  /* length of plaintext          */
+                      void* crtxt );          /* ciphertext result            */
 
 void AES_CFB_decrypt( const uint8_t* key,     /* decryption key               */
                       const uint8_t iVec[16], /* initialization vector        */
-                      const uint8_t* crtxt,   /* cipher-text buffer           */
-                      const size_t crtxtLen,  /* length of input cipher text  */
-                      uint8_t* pntxt );       /* plaintext result             */
+                      const void* crtxt,      /* ciphertext input             */
+                      const size_t crtxtLen,  /* length of ciphertext         */
+                      void* pntxt );          /* plaintext result             */
 #endif /* CFB */
 
 /**----------------------------------------------------------------------------
@@ -198,15 +207,15 @@ Main functions for OFB-AES block ciphering
 #if OFB
 void AES_OFB_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t iVec[16], /* initialization vector        */
-                      const uint8_t* pntxt,   /* plaintext buffer             */
-                      const size_t ptextLen,  /* length of input plain text   */
-                      uint8_t* crtxt );       /* cipher-text result           */
+                      const void* pntxt,      /* plaintext input              */
+                      const size_t ptextLen,  /* length of plaintext          */
+                      void* crtxt );          /* ciphertext result            */
 
 void AES_OFB_decrypt( const uint8_t* key,     /* decryption key               */
                       const uint8_t iVec[16], /* initialization vector        */
-                      const uint8_t* crtxt,   /* cipher-text buffer           */
-                      const size_t crtxtLen,  /* length of input cipher text  */
-                      uint8_t* pntxt );       /* plaintext result             */
+                      const void* crtxt,      /* ciphertext input             */
+                      const size_t crtxtLen,  /* length of ciphertext         */
+                      void* pntxt );          /* plaintext result             */
 #endif /* OFB */
 
 /**----------------------------------------------------------------------------
@@ -215,15 +224,15 @@ Main functions for XTS-AES block ciphering
 #if XTS
 char AES_XTS_encrypt( const uint8_t* keys,    /* encryption key pair          */
                       const uint8_t* tweak,   /* tweak value (unit/sector ID) */
-                      const uint8_t* pntxt,   /* plaintext buffer             */
-                      const size_t ptextLen,  /* length of input plain text   */
-                      uint8_t* crtxt );       /* cipher-text result           */
+                      const void* pntxt,      /* plaintext input              */
+                      const size_t ptextLen,  /* length of plaintext          */
+                      void* crtxt );          /* ciphertext result            */
 
 char AES_XTS_decrypt( const uint8_t* keys,    /* decryption key pair          */
                       const uint8_t* tweak,   /* tweak value (unit/sector ID) */
-                      const uint8_t* crtxt,   /* cipher-text buffer           */
-                      const size_t crtxtLen,  /* length of input cipher text  */
-                      uint8_t* pntxt );       /* plaintext result             */
+                      const void* crtxt,      /* ciphertext input             */
+                      const size_t crtxtLen,  /* length of ciphertext         */
+                      void* pntxt );          /* plaintext result             */
 #endif /* XTS */
 
 /**----------------------------------------------------------------------------
@@ -232,15 +241,15 @@ Main functions for CTR-AES block ciphering
 #if CTR_NA
 void AES_CTR_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t* iv,      /* initialization vector/ nonce */
-                      const uint8_t* pntxt,   /* plaintext buffer             */
-                      const size_t ptextLen,  /* length of input plain text   */
-                      uint8_t* crtxt );       /* cipher-text result           */
+                      const void* pntxt,      /* plaintext input              */
+                      const size_t ptextLen,  /* length of plaintext          */
+                      void* crtxt );          /* ciphertext result            */
 
 void AES_CTR_decrypt( const uint8_t* key,     /* decryption key               */
                       const uint8_t* iv,      /* initialization vector/ nonce */
-                      const uint8_t* crtxt,   /* cipher-text buffer           */
-                      const size_t crtxtLen,  /* length of input cipher text  */
-                      uint8_t* pntxt );       /* plaintext result             */
+                      const void* crtxt,      /* ciphertext input             */
+                      const size_t crtxtLen,  /* length of ciphertext         */
+                      void* pntxt );          /* plaintext result             */
 #endif /* CTR */
 
 /**----------------------------------------------------------------------------
@@ -248,20 +257,20 @@ Main functions for SIV-AES block ciphering
  -----------------------------------------------------------------------------*/
 #if SIV
 void AES_SIV_encrypt( const uint8_t* keys,    /* encryption key pair          */
-                      const uint8_t* pntxt,   /* plain text                   */
-                      const size_t ptextLen,  /* length of input plain text   */
-                      const uint8_t* aData,   /* added authentication data    */
-                      const size_t aDataLen,  /* size of authentication data  */
+                      const void* pntxt,      /* plaintext input              */
+                      const size_t ptextLen,  /* length of plaintext          */
+                      const void* aData,      /* added authentication data    */
+                      const size_t aDataLen,  /* length of AAD (auth. data)   */
                       uint8_t iv[16],         /* synthesized initial-vector   */
-                      uint8_t* crtxt );       /* cipher-text result           */
+                      void* crtxt );          /* ciphertext result            */
 
 char AES_SIV_decrypt( const uint8_t* keys,    /* decryption key pair          */
                       const uint8_t iv[16],   /* provided initial-vector      */
-                      const uint8_t* crtxt,   /* cipher text                  */
-                      const size_t crtxtLen,  /* length of input cipher-text  */
-                      const uint8_t* aData,   /* added authentication data    */
-                      const size_t aDataLen,  /* size of authentication data  */
-                      uint8_t* pntxt );       /* plain-text result            */
+                      const void* crtxt,      /* ciphertext input             */
+                      const size_t crtxtLen,  /* length of ciphertext         */
+                      const void* aData,      /* added authentication data    */
+                      const size_t aDataLen,  /* length of AAD (auth. data)   */
+                      void* pntxt );          /* plaintext result             */
 #endif /* SIV */
 
 /**----------------------------------------------------------------------------
@@ -269,22 +278,22 @@ Main functions for GCM-AES block ciphering
  -----------------------------------------------------------------------------*/
 #if GCM
 void AES_GCM_encrypt( const uint8_t* key,     /* encryption key               */
-                      const uint8_t* nonce,   /* a.k.a initialization vector  */
-                      const uint8_t* pntxt,   /* plain text                   */
-                      const size_t ptextLen,  /* length of input plain text   */
+                      const uint8_t* nonce,   /* nonce or IV (init. vector)   */
+                      const uint8_t* pntxt,   /* plaintext input              */
+                      const size_t ptextLen,  /* length of plaintext          */
                       const uint8_t* aData,   /* added authentication data    */
-                      const size_t aDataLen,  /* size of authentication data  */
-                      uint8_t* crtxt,         /* cipher-text result           */
+                      const size_t aDataLen,  /* length of AAD (auth. data)   */
+                      uint8_t* crtxt,         /* ciphertext result            */
                       uint8_t auTag[16] );    /* message authentication tag   */
 
 char AES_GCM_decrypt( const uint8_t* key,     /* decryption key               */
-                      const uint8_t* nonce,   /* a.k.a initialization vector  */
-                      const uint8_t* crtxt,   /* cipher text + appended tag   */
-                      const size_t crtxtLen,  /* length of input cipher-text  */
+                      const uint8_t* nonce,   /* nonce or IV (init. vector)   */
+                      const uint8_t* crtxt,   /* ciphertext + appended tag    */
+                      const size_t crtxtLen,  /* length of ciphertext         */
                       const uint8_t* aData,   /* added authentication data    */
-                      const size_t aDataLen,  /* size of authentication data  */
-                      const uint8_t tagLen,   /* size of tag (if any)         */
-                      uint8_t* pntxt );       /* plain-text result            */
+                      const size_t aDataLen,  /* length of AAD (auth. data)   */
+                      const uint8_t tagLen,   /* length of tag (if any)       */
+                      uint8_t* pntxt );       /* plaintext result             */
 #endif /* GCM */
 
 /**----------------------------------------------------------------------------
@@ -292,22 +301,22 @@ Main functions for CCM-AES block ciphering
  -----------------------------------------------------------------------------*/
 #if CCM
 void AES_CCM_encrypt( const uint8_t* key,     /* encryption key               */
-                      const uint8_t* nonce,   /* a.k.a initialization vector  */
-                      const uint8_t* pntxt,   /* plain text                   */
-                      const size_t ptextLen,  /* length of input plain text   */
+                      const uint8_t* nonce,   /* nonce or IV (init. vector)   */
+                      const uint8_t* pntxt,   /* plaintext input              */
+                      const size_t ptextLen,  /* length of plaintext          */
                       const uint8_t* aData,   /* added authentication data    */
-                      const size_t aDataLen,  /* size of authentication data  */
-                      uint8_t* crtxt,         /* cipher-text result           */
-                      uint8_t auTag[16] );    /* message authentication tag   */
+                      const size_t aDataLen,  /* length of AAD (auth. data)   */
+                      uint8_t* crtxt,         /* ciphertext result            */
+                      uint8_t* auTag );       /* message authentication tag   */
 
 char AES_CCM_decrypt( const uint8_t* key,     /* decryption key               */
-                      const uint8_t* nonce,   /* a.k.a initialization vector  */
-                      const uint8_t* crtxt,   /* cipher text + appended tag   */
-                      const size_t crtxtLen,  /* length of input cipher-text  */
+                      const uint8_t* nonce,   /* nonce or IV (init. vector)   */
+                      const uint8_t* crtxt,   /* ciphertext + appended tag    */
+                      const size_t crtxtLen,  /* length of ciphertext         */
                       const uint8_t* aData,   /* added authentication data    */
-                      const size_t aDataLen,  /* size of authentication data  */
-                      const uint8_t tagLen,   /* size of tag (if any)         */
-                      uint8_t* pntxt );       /* plain-text result            */
+                      const size_t aDataLen,  /* length of AAD (auth. data)   */
+                      const uint8_t tagLen,   /* length of tag (=CCM_TAG_LEN) */
+                      uint8_t* pntxt );       /* plaintext result             */
 #endif /* CCM */
 
 /**----------------------------------------------------------------------------
@@ -315,22 +324,22 @@ Main functions for OCB-AES block ciphering
  -----------------------------------------------------------------------------*/
 #if OCB
 void AES_OCB_encrypt( const uint8_t* key,     /* encryption key               */
-                      const uint8_t* nonce,   /* a.k.a initialization vector  */
-                      const uint8_t* pntxt,   /* plain text                   */
-                      const size_t ptextLen,  /* length of input plain text   */
+                      const uint8_t* nonce,   /* nonce or IV (init. vector)   */
+                      const uint8_t* pntxt,   /* plaintext input              */
+                      const size_t ptextLen,  /* length of plaintext          */
                       const uint8_t* aData,   /* added authentication data    */
-                      const size_t aDataLen,  /* size of authentication data  */
-                      uint8_t* crtxt,         /* cipher-text result           */
-                      uint8_t auTag[16] );    /* message authentication tag   */
+                      const size_t aDataLen,  /* length of AAD (auth. data)   */
+                      uint8_t* crtxt,         /* ciphertext result            */
+                      uint8_t* auTag );       /* message authentication tag   */
 
 char AES_OCB_decrypt( const uint8_t* key,     /* decryption key               */
-                      const uint8_t* nonce,   /* a.k.a initialization vector  */
-                      const uint8_t* crtxt,   /* cipher text + appended tag   */
-                      const size_t crtxtLen,  /* length of input cipher-text  */
+                      const uint8_t* nonce,   /* nonce or IV (init. vector)   */
+                      const uint8_t* crtxt,   /* ciphertext + appended tag    */
+                      const size_t crtxtLen,  /* length of ciphertext         */
                       const uint8_t* aData,   /* added authentication data    */
-                      const size_t aDataLen,  /* size of authentication data  */
-                      const uint8_t tagLen,   /* size of tag (if any)         */
-                      uint8_t* pntxt );       /* plain-text result            */
+                      const size_t aDataLen,  /* length of AAD (auth. data)   */
+                      const uint8_t tagLen,   /* length of tag (=OCB_TAG_LEN) */
+                      uint8_t* pntxt );       /* plaintext result             */
 #endif /* OCB */
 
 /**----------------------------------------------------------------------------
@@ -339,30 +348,30 @@ Main functions for EAX-AES mode; more info at the bottom of this document.
 #if EAX
 void AES_EAX_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t* nonce,   /* arbitrary-size nonce array   */
-                      const uint8_t* pntxt,   /* plain text                   */
-                      const size_t ptextLen,  /* length of input plain text   */
+                      const uint8_t* pntxt,   /* plaintext input              */
+                      const size_t ptextLen,  /* length of plaintext          */
 #if EAXP
-                      const size_t nonceLen,  /* size of provided nonce       */
-                      uint8_t* crtxt );       /* cipher-text result + mac (4) */
+                      const size_t nonceLen,  /* length of provided nonce     */
+                      uint8_t* crtxt );       /* ciphertext result + mac (4)  */
 #else
                       const uint8_t* aData,   /* added authentication data    */
-                      const size_t aDataLen,  /* size of authentication data  */
-                      uint8_t* crtxt,         /* cipher-text result           */
+                      const size_t aDataLen,  /* length of AAD (auth. data)   */
+                      uint8_t* crtxt,         /* ciphertext result            */
                       uint8_t auTag[16] );    /* message authentication tag   */
 #endif
 
 char AES_EAX_decrypt( const uint8_t* key,     /* decryption key               */
                       const uint8_t* nonce,   /* arbitrary-size nonce array   */
-                      const uint8_t* crtxt,   /* cipher text + appended tag   */
-                      const size_t crtxtLen,  /* length of input cipher-text  */
+                      const uint8_t* crtxt,   /* ciphertext + appended tag    */
+                      const size_t crtxtLen,  /* length of ciphertext         */
 #if EAXP
-                      const size_t nonceLen,  /* size of provided nonce       */
+                      const size_t nonceLen,  /* length of provided nonce     */
 #else
                       const uint8_t* aData,   /* added authentication data    */
-                      const size_t aDataLen,  /* size of authentication data  */
-                      const uint8_t tagLen,   /* size of tag (if any)         */
+                      const size_t aDataLen,  /* length of AAD (auth. data)   */
+                      const uint8_t tagLen,   /* length of tag (if any)       */
 #endif
-                      uint8_t* pntxt );       /* plain-text result            */
+                      uint8_t* pntxt );       /* plaintext result             */
 #endif /* EAX */
 
 /**----------------------------------------------------------------------------
@@ -371,21 +380,21 @@ Main functions for GCM-SIV-AES block ciphering
 #if GCM_SIV
 void GCM_SIV_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t* nonce,   /* provided 96-bit nonce        */
-                      const uint8_t* pntxt,   /* plain text                   */
-                      const size_t ptextLen,  /* length of input plain text   */
+                      const uint8_t* pntxt,   /* plaintext input              */
+                      const size_t ptextLen,  /* length of plaintext          */
                       const uint8_t* aData,   /* added authentication data    */
-                      const size_t aDataLen,  /* size of authentication data  */
-                      uint8_t* crtxt,         /* cipher-text result           */
+                      const size_t aDataLen,  /* length of AAD (auth. data)   */
+                      uint8_t* crtxt,         /* ciphertext result            */
                       uint8_t auTag[16] );    /* 16-bytes mandatory tag       */
 
 char GCM_SIV_decrypt( const uint8_t* key,     /* decryption key               */
                       const uint8_t* nonce,   /* provided 96-bit nonce        */
-                      const uint8_t* crtxt,   /* cipher text + appended tag   */
-                      const size_t crtxtLen,  /* length of input cipher-text  */
+                      const uint8_t* crtxt,   /* ciphertext + appended tag    */
+                      const size_t crtxtLen,  /* length of ciphertext         */
                       const uint8_t* aData,   /* added authentication data    */
-                      const size_t aDataLen,  /* size of authentication data  */
-                      const uint8_t tagLen,   /* size of tag (must be 16)     */
-                      uint8_t* pntxt );       /* plain-text result            */
+                      const size_t aDataLen,  /* length of AAD (auth. data)   */
+                      const uint8_t tagLen,   /* length of tag (must be 16)   */
+                      uint8_t* pntxt );       /* plaintext result             */
 #endif /* GCM-SIV */
 
 /**----------------------------------------------------------------------------
@@ -393,14 +402,14 @@ Main functions for AES key-wrapping
  -----------------------------------------------------------------------------*/
 #if KWA
 char AES_KEY_wrap( const uint8_t* kek,        /* key encryption key           */
-                   const uint8_t* secret,     /* input secret to be wrapped   */
-                   const size_t secretLen,    /* size of input                */
+                   const void* secret,        /* the secret to be wrapped     */
+                   const size_t secretLen,    /* length of plaintext secret   */
                    uint8_t* wrapped );        /* key-wrapped output           */
 
 char AES_KEY_unwrap( const uint8_t* kek,      /* key encryption key           */
-                     const uint8_t* wrapped,  /* key-wrapped secret           */
-                     const size_t wrapLen,    /* size of input (secretLen +8) */
-                     uint8_t* secret );       /* buffer for unwrapped key     */
+                     const void* wrapped,     /* key-wrapped secret           */
+                     const size_t wrapLen,    /* length of wrapped secret     */
+                     uint8_t* secret );       /* the unwrapped key result     */
 #endif /* KWA */
 
 /**----------------------------------------------------------------------------
@@ -409,23 +418,21 @@ Main functions for FPE-AES; more info at the bottom of this page.
 #if FPE
 char AES_FPE_encrypt( const uint8_t* key,     /* encryption key               */
                       const uint8_t* tweak,   /* tweak bytes                  */
-#if FF_X == 3
-#define FF3_TWEAK_LEN 7                       /* either 8 (FF3), or 7 (FF3-1) */
-#else
-                      const size_t tweakLen,  /* size of tweak array          */
+#if FF_X != 3
+                      const size_t tweakLen,  /* length of tweak array        */
 #endif
                       const void* pntxt,      /* input plaintext string       */
                       const size_t ptextLen,  /* length of plaintext string   */
-                      void* crtxt );          /* cipher-text result           */
+                      void* crtxt );          /* ciphertext result            */
 
 char AES_FPE_decrypt( const uint8_t* key,     /* decryption key               */
                       const uint8_t* tweak,   /* tweak bytes                  */
 #if FF_X != 3
-                      const size_t tweakLen,  /* size of tweak array          */
+                      const size_t tweakLen,  /* length of tweak array        */
 #endif
                       const void* crtxt,      /* input ciphertext string      */
                       const size_t crtxtLen,  /* length of ciphertext string  */
-                      void* pntxt );          /* plain-text result            */
+                      void* pntxt );          /* plaintext result             */
 #endif /* FPE */
 
 /**----------------------------------------------------------------------------
@@ -435,7 +442,7 @@ Main function for Poly1305-AES message authentication code
 void AES_Poly1305( const uint8_t* keys,       /* encryption/mixing key pair   */
                    const uint8_t nonce[16],   /* the 128-bit nonce            */
                    const void* data,          /* input data buffer            */
-                   const size_t dataSize,     /* size of data in bytes        */
+                   const size_t dataSize,     /* length of data in bytes      */
                    uint8_t mac[16] );         /* poly1305-AES mac of data     */
 #endif
 
@@ -443,10 +450,10 @@ void AES_Poly1305( const uint8_t* keys,       /* encryption/mixing key pair   */
 Main function for AES Cipher-based Message Authentication Code
  -----------------------------------------------------------------------------*/
 #if CMAC
-void AES_CMAC( const uint8_t* key,            /* encryption/cipher key        */
+void AES_CMAC( const uint8_t* key,            /* encryption or cipher key     */
                const void* data,              /* input data buffer            */
-               const size_t dataSize,         /* size of data in bytes        */
-               uint8_t mac[16] );             /* CMAC result of input data    */
+               const size_t dataSize,         /* length of data in bytes      */
+               uint8_t mac[16] );             /* CMAC of input data           */
 #endif
 
 #ifdef __cplusplus
@@ -456,16 +463,19 @@ void AES_CMAC( const uint8_t* key,            /* encryption/cipher key        */
 /**----------------------------------------------------------------------------
 The error codes and key length should be defined here for external references:
  -----------------------------------------------------------------------------*/
-#define ENCRYPTION_FAILURE       0x1E
-#define DECRYPTION_FAILURE       0x1D
-#define AUTHENTICATION_FAILURE   0x1A
-#define ENDED_IN_SUCCESS         0x00
-
-#if (AES___ != 256) && (AES___ != 192)
-#define AES_KEY_SIZE   16
+#if AES___ != 256 && AES___ != 192
+#define AES_KEY_SIZE  16
 #else
-#define AES_KEY_SIZE   (AES___ / 8)
+#define AES_KEY_SIZE  (AES___ / 8)
 #endif
+
+enum function_result_codes
+{
+    M_ENCRYPTION_ERROR     = 0x1E,
+    M_DECRYPTION_ERROR     = 0x1D,
+    M_AUTHENTICATION_ERROR = 0x1A,
+    M_RESULT_SUCCESS       = 0x00
+};
 
 #endif /* header guard */
 
@@ -473,60 +483,84 @@ The error codes and key length should be defined here for external references:
 ¦               Notes and remarks about the above-defined macros               ¦
 --------------------------------------------------------------------------------
 
-* In EBC/CBC/XEX modes, the size of input must be a multiple of block-size.
-    Otherwise it needs to be padded. The simplest (default) padding mode is to
-    fill the rest of block by zeros. Supported standard padding methods are
-    PKCS#7 and ISO/IEC 7816-4, which can be enabled by the AES_PADDING macro.
+* The main difference between the standard AES methods is in their key-expansion
+    process. So for example, AES-128-GCM and AES-256-GCM are pretty much similar
+    except for their key size and a minor change in the KeyExpansion function.
 
-* In many texts, you may see that the words 'nonce' and 'initialization vector'
-    are used interchangeably. But they have a subtle difference. Sometimes nonce
-    is a part of the I.V, which itself can either be a full block or a partial
-    one. In CBC/CFB/OFB modes, the provided I.V must be a full block. In pure
-    CTR mode (CTR_NA) you can either provide a 96-bit I.V and let the count
-    start at CTR_STARTVALUE, or use a full block IV.
+* In EBC/CBC/XEX modes, the size of input must be a multiple of block-size.
+    Otherwise it needs to be padded. The simplest (default) way of padding is to
+    fill the rest of block by zeros. Two standard methods for padding are PKCS#7
+    and ISO/IEC 7816-4, which can be enabled by the AES_PADDING macro.
+
+* The FPE mode has two distinct NIST-approved algorithms, namely FF1 and FF3-1.
+    Use the FF_X macro to change the encryption method, which is FF1 by default.
+    The early version of FF3 required 8-byte tweaks. But this turned out to have
+    vulnerabilities and so it was reduced to 7 bytes in the FF3-1.
+
+    The input and output strings of FPE functions must be consisted of a fixed
+    set of characters called "the alphabet". Here, the default alphabet is the
+    set of digits {'0'...'9'}. If you want to use a different alphabet, set the
+    CUSTOM_ALPHABET macro and refer to the <micro_fpe.h> header. This header is
+    required only when a custom alphabet has to be defined, and contains some
+    illustrative examples and clear guidelines on how to do so.
+
+* Many reference texts may use the terms "nonce" and "initialization vector"
+    interchangeably, but technically they are not the same. Sometimes nonce is
+    a part of the I.V, which itself can either be a full block or a partial one.
+    In CBC, CFB and OFB modes, the provided IV must be a full block. In pure CTR
+    (CTR_NA) mode, the IV can either be a full block, or a 96 bit one —which is
+    also called nonce. In the latter case, counting begins at CTR_STARTVALUE.
 
 * In AEAD modes, the size of nonce and tag might be a parameter of the algorithm
     such that changing them affect the results. The GCM and EAX modes support
     arbitrary sizes for nonce. In CCM, the nonce length may vary from 8 to 13
     bytes. Also the tag size is an EVEN number between 4..16. In OCB, the nonce
-    size is 1..15 and the tag is 0..16 bytes. Note that the 'calculated' tag-
-    size is always 16 bytes which can later be truncated to desired values. So
-    in encryption functions, the provided authTag buffer must be 16 bytes long.
+    size is 1..15 and the tag is 0..16 bytes. Note that the "calculated" tag-
+    size is always 16 bytes which is then truncated to the desired values. So in
+    encryption functions, the provided buffer for tag must be 16 bytes long.
+
+* In most functions, as you may notice, first the entire input data is copied
+    to the output and then the encryption process is carried out on its buffer.
+    This is a very useful feature especially when the memory is limited, as you
+    can perform "in-place encryption" on the input data and there is no need to
+    allocate a separate buffer for the output. But please note that the `memcpy`
+    function has undefined behavior if its source and destination are the same.
+    So in such cases, you can simply delete the memcpy(...); line.
 
 * For the EAX mode of operation, the IEEE-1703 standard defines EAX' which is a
-    modified version that combines AAD and nonce. Also the tag size is fixed to
+    modified version that combines AAD and nonce. Also the tag size is fixed on
     4 bytes. So EAX-prime functions don't need to take additional authentication
-    data and tag-size as separate parameters.
+    data and tag-size as separate parameters. It has been proven that EAX' has
+    serious vulnerabilities and its usage is not recommended.
 
 * In SIV mode, multiple separate units of authentication headers can be provided
     for the nonce synthesis. Here we assume that only one unit of AAD (aData) is
     sufficient, which is practically true.
 
-* The FPE mode has two distinct NIST-approved algorithms, namely FF1 and FF3-1.
-    Use the FF_X macro to change the encryption method, which is FF1 by default.
-    The input and output strings must be consisted of a fixed set of characters
-    called 'the alphabet'. The default alphabet is the set of digits {'0'..'9'}.
-    If you want to use a different alphabet, set the CUSTOM_ALPHABET macro and
-    refer to the "micro_fpe.h" header. This file is needed only when a custom
-    alphabet has to be defined. It contains some illustrative examples and clear
-    guidelines on how to do so.
-
 * The key wrapping mode is also denoted by KW. In this mode, the input secret is
     divided into 64bit blocks. Number of blocks is at least 2, and it is assumed
     that no padding is required. For padding, the KWP mode must be used which is
-    easily implementable, but left as an exercise! The key-wrapped output is an
-    extra block (8 bytes) longer than the secret. In the NIST SP800-38F document
-    you may find some mentions of TKW which is for 3DES and irrelevant here.
+    easily implementable but left as an exercise! In the NIST SP800-38F document
+    you may find mentions of TKW which is based on 3DES and irrelevant here.
+
+* Here is a technical tip for the keen minds who have managed to read this far:
+    Excessive use of macro definitions in code is generally not a good practice,
+    especially in large projects. As it may possibly cause some name-conflicts
+    and errors for macro redefinition. So you can either delete the unnecessary
+    macros and clean up the code, or undef macros at the end of the source file
+    (i.e. write: #ifdef MACRO \ #undef MACRO \ #endif). Or replace their names
+    with some unique ones that surely won't be used elsewhere. For example,
+    rename the CTR macro above to MICRO_AES_CTR_MODE or something like that.
 
 * Let me explain three extra options that are defined in the source file. If the
     length of the input cipher/plain text is 'always' less than 4KB, you can
     enable the SMALL_CIPHER macro to save a few bytes in the compiled code. This
     assumption is likely to be valid for some embedded systems and small-scale
-    applications. Furthermore by enabling the DONT_USE_FUNCTIONS macro, you may
-    witness a positive effect on the speed while increasing the size of compiled
-    code. Nonetheless, others might get a different result from them.
+    applications. Furthermore, enabling the DISCARD_SUBROUTINES macro may have a
+    positive effect on the speed while increasing the size of compiled code.
+    Nonetheless, it is also possible to get different results sometimes.
 
-    The INCREASE_SECURITY macro, as its name suggests, is dealing with security
+    The INCREASE_SECURITY macro —as its name suggests, is dealing with security
     considerations. For example, since the RoundKey is declared as static array
     it might get exposed to some attacks. By enabling this macro, round-keys are
     wiped out at the end of ciphering operations. However, please keep in mind

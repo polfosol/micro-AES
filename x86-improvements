@@ -1,24 +1,28 @@
-/**
- * Since µAES code is optimized for 8-bit CPUs, it might be much less efficient
+/** Since µAES code is optimized for 8-bit CPUs, it might be much less efficient
  * for a 32-bit machine. We can apply a few tweaks, especially in the process of
- * mixing columns, to boost its performance on such systems. For example, here's
- * a piece of code to replace the lines #83 to #131 of "micro_aes.c" source file
- * —starting with `#if DONT_USE_FUNCTIONS`. The endian-ness of system is crucial
- * and must be determined by appropriate macros, e.g. let BIG_ENDIAN_INTEGERS be
- * FALSE when compiling for a little-endian system and TRUE otherwise. Note that
- * the `unsigned` keyword is actually equivalent to `uint32_t`. Furthermore, the
- * body code of `MixColumns` and `InvMixColumns` must be changed as follows.. */
+ * mixing columns, to boost the performance on such systems. It's safe to assume
+ * that the `unsigned` keyword is equivalent to `uint32_t` type. But endian-ness
+ * of the system must be known or pre-determined, either by including <endian.h>
+ * or evaluating an expression. For example suppose `SYSTEM_IS_BIG_ENDIAN` macro
+ * indicates whether a system is big-endian or not! Then, the following piece of
+ * code can be used to replace the lines #88 to #134 of the "micro_aes.c" source
+ * file —starting with `#if DISCARD_SUBROUTINES`. Next, the body of `MixColumns`
+ * and `InvMixColumns` functions must be updated to incorporate these changes */
 
-#if BIG_ENDIAN_INTEGERS
+#if CHECK_ENDIANNES_AT_RUNTIME
+static const unsigned  ShiftLE  = 16;
+#define RL8(x)  rotl( x, 8U + *(char*) &ShiftLE )
+
+#elif SYSTEM_IS_BIG_ENDIAN               /* ! use appropriate standard macros */
 #define RL8(x)  rotl( x, 8 )
 #else
-#define RL8(x)  rotl( x, 24 )            /* equivalent little-endian rotation */
+#define RL8(x)  rotl( x, 24 )
 #endif
 #define R16(x)  rotl( x, 16 )
 #define RRR(x)  rotl( x, 8 ) ^ rotl( x, 16 ) ^ rotl( x, 24 )
 
 /** This method must simply compile to a bit-rotate CPU instruction (ror/rol) */
-static unsigned rotl( const unsigned value, unsigned shift )
+static unsigned rotl( unsigned value, unsigned shift )
 {
     return (value << shift) | (value >> (32 - shift));
 }
@@ -66,13 +70,13 @@ InvMixColumns:
 ================================================================================
 a sample compiled assembly output, given by gcc using `-S -Os` flags:
 
-xorBlock(unsigned char const*, unsigned char*):
-        mov     eax, QWORD PTR [rdi]
-        xor     QWORD PTR [rsi], eax
-        mov     eax, QWORD PTR [rdi+8]
-        xor     QWORD PTR [rsi+8], eax
+xorBlock:
+        mov     rax, QWORD PTR [rdi]
+        xor     QWORD PTR [rsi], rax
+        mov     rax, QWORD PTR [rdi+8]
+        xor     QWORD PTR [rsi+8], rax
         ret
-quad_xtime(unsigned int*):
+quad_xtime:
         mov     edx, DWORD PTR [rdi]
         mov     eax, edx
         add     edx, edx
@@ -83,7 +87,7 @@ quad_xtime(unsigned int*):
         xor     eax, edx
         mov     DWORD PTR [rdi], eax
         ret
-KeyExpansion(unsigned char const*):
+KeyExpansion:
         movups  xmm0, XMMWORD PTR [rdi]
         mov     eax, 16
         mov     dl, 1
@@ -122,7 +126,7 @@ KeyExpansion(unsigned char const*):
         cmp     rax, 176
         jne     .L7
         ret
-SubBytes(unsigned char*):
+SubBytes:
         xor     eax, eax
 .L12:
         movzx   edx, BYTE PTR [rdi+rax]
@@ -132,7 +136,7 @@ SubBytes(unsigned char*):
         cmp     rax, 16
         jne     .L12
         ret
-ShiftRows(unsigned char (*) [4][4]):
+ShiftRows:
         mov     dl, BYTE PTR [rdi+5]
         mov     al, BYTE PTR [rdi+1]
         mov     BYTE PTR [rdi+1], dl
@@ -158,7 +162,7 @@ ShiftRows(unsigned char (*) [4][4]):
         mov     BYTE PTR [rdi+7], al
         mov     BYTE PTR [rdi+11], dl
         ret
-MixColumns(unsigned char (*) [4][4]):
+MixColumns:
         lea     r8, [rdi+16]
 .L16:
         mov     eax, DWORD PTR [rdi]
@@ -171,7 +175,7 @@ MixColumns(unsigned char (*) [4][4]):
         rol     ecx, 8
         mov     DWORD PTR [rdi], eax
         xor     ecx, edx
-        call    quad_xtime(unsigned int*)
+        call    quad_xtime
         xor     ecx, DWORD PTR [rdi]
         add     rdi, 4
         xor     ecx, esi
@@ -179,7 +183,7 @@ MixColumns(unsigned char (*) [4][4]):
         cmp     rdi, r8
         jne     .L16
         ret
-rijndaelEncrypt(unsigned char const*, unsigned char*):
+rijndaelEncrypt:
         mov     r9, rsi
         push    rdx
         cmp     rsi, rdi
@@ -192,19 +196,19 @@ rijndaelEncrypt(unsigned char const*, unsigned char*):
         mov     rdi, r10
         mov     rsi, r9
         add     r10, 16
-        call    xorBlock(unsigned char const*, unsigned char*)
+        call    xorBlock
         mov     rdi, r9
-        call    SubBytes(unsigned char*)
-        call    ShiftRows(unsigned char (*) [4][4])
+        call    SubBytes
+        call    ShiftRows
         cmp     r10, OFFSET FLAT:RoundKey+160
         je      .L20
-        call    MixColumns(unsigned char (*) [4][4])
+        call    MixColumns
         jmp     .L21
 .L20:
         mov     edi, OFFSET FLAT:RoundKey+160
         pop     rax
-        jmp     xorBlock(unsigned char const*, unsigned char*)
-InvSubBytes(unsigned char*):
+        jmp     xorBlock
+InvSubBytes:
         xor     eax, eax
 .L24:
         movzx   edx, BYTE PTR [rdi+rax]
@@ -214,7 +218,7 @@ InvSubBytes(unsigned char*):
         cmp     rax, 16
         jne     .L24
         ret
-InvShiftRows(unsigned char (*) [4][4]):
+InvShiftRows:
         mov     dl, BYTE PTR [rdi+9]
         mov     al, BYTE PTR [rdi+13]
         mov     BYTE PTR [rdi+13], dl
@@ -240,18 +244,18 @@ InvShiftRows(unsigned char (*) [4][4]):
         mov     BYTE PTR [rdi+15], al
         mov     BYTE PTR [rdi+11], dl
         ret
-InvMixColumns(unsigned char (*) [4][4]):
+InvMixColumns:
         mov     rcx, rdi
         lea     rsi, [rdi+16]
 .L28:
         mov     rdi, rcx
         mov     r8d, DWORD PTR [rcx]
         add     rcx, 4
-        call    quad_xtime(unsigned int*)
+        call    quad_xtime
         mov     r10d, DWORD PTR [rcx-4]
-        call    quad_xtime(unsigned int*)
+        call    quad_xtime
         mov     r9d, DWORD PTR [rcx-4]
-        call    quad_xtime(unsigned int*)
+        call    quad_xtime
         mov     edx, DWORD PTR [rcx-4]
         mov     eax, r10d
         mov     edi, r8d
@@ -280,7 +284,7 @@ InvMixColumns(unsigned char (*) [4][4]):
         cmp     rsi, rcx
         jne     .L28
         ret
-rijndaelDecrypt(unsigned char const*, unsigned char*):
+rijndaelDecrypt:
         push    rbp
         mov     r11, rsi
         push    rbx
@@ -296,20 +300,20 @@ rijndaelDecrypt(unsigned char const*, unsigned char*):
         cmp     bl, 10
         je      .L32
         mov     rdi, r11
-        call    InvMixColumns(unsigned char (*) [4][4])
+        call    InvMixColumns
         jmp     .L33
 .L32:
         mov     rsi, r11
         mov     edi, OFFSET FLAT:RoundKey+160
-        call    xorBlock(unsigned char const*, unsigned char*)
+        call    xorBlock
 .L33:
         mov     rdi, r11
         mov     rsi, r11
-        call    InvShiftRows(unsigned char (*) [4][4])
-        call    InvSubBytes(unsigned char*)
+        call    InvShiftRows
+        call    InvSubBytes
         mov     rdi, rbp
         sub     rbp, 16
-        call    xorBlock(unsigned char const*, unsigned char*)
+        call    xorBlock
         dec     bl
         jne     .L34
         pop     rax

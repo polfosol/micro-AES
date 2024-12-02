@@ -18,14 +18,14 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>$(DefaultPlatformToolset)</PlatformToolset>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v120</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>$(DefaultPlatformToolset)</PlatformToolset>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v120</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -66,7 +66,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -75,13 +75,25 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
+  <ItemGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile Include="testvectors\aes_testvectors.c" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile Include="main.c" />
-    <ClCompile Include="micro_aes.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="micro_aes.c" />
     <ClInclude Include="micro_aes.h" />
     <ClInclude Include="micro_fpe.h" />
+    <ClInclude Include="testvectors\aes_testvectors.h" />
+    <ClInclude Include="testvectors\aes_testvectors_CCM.h" />
+    <ClInclude Include="testvectors\aes_testvectors_CMAC.h" />
+    <ClInclude Include="testvectors\aes_testvectors_FPE.h" />
+    <ClInclude Include="testvectors\aes_testvectors_GCM.h" />
+    <ClInclude Include="testvectors\aes_testvectors_GCMSIV.h" />
+    <ClInclude Include="testvectors\aes_testvectors_OCB.h" />
+    <ClInclude Include="testvectors\aes_testvectors_POLY1305.h" />
+    <ClInclude Include="testvectors\aes_testvectors_XTS.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

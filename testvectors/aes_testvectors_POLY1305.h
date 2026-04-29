@@ -50,7 +50,6 @@ void aes_poly1305_test(FILE** files, unsigned* count)
             if (strncmp(buffer, head[h], strlen(head[h])) == 0)
             {
                 value = strrchr(buffer, ' ') + 1;
-                d = (uint8_t*) &buffer[LINES_MAX_LEN];
                 s[h] = strlen(value) / 2;
                 e += (h == 2 || h == 3);
                 break;
@@ -65,6 +64,7 @@ void aes_poly1305_test(FILE** files, unsigned* count)
             str2bytes(value, n);
             break;
         case 2:
+            d = (uint8_t*) &buffer[LINES_MAX_LEN];
             str2bytes(value, d);
             break;
         case 3:

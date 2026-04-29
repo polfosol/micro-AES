@@ -73,13 +73,13 @@ void aes_ocb_test(FILE** files, unsigned* count)
             str2bytes(value, a);
             break;
         case 3:
-            str2bytes(value, p);
+            str2bytes(value, c + sizeof p);
             break;
         case 4:
-            str2bytes(value, c);
+            str2bytes(value, p);
             break;
         case 5:
-            str2bytes(value, c + sizeof p);
+            str2bytes(value, c);
             break;
         case 6:
             h = strstr(value, "ERROR") != NULL ? 8 : 0;
@@ -87,10 +87,10 @@ void aes_ocb_test(FILE** files, unsigned* count)
         }
         if (h % 8 == 0 && s[0] == AES_KEYLENGTH)
         {
-            if (s[1] == OCB_NONCE_LEN && s[5] == OCB_TAG_LEN)
+            if (s[1] == OCB_NONCE_LEN && s[3] == OCB_TAG_LEN)
             {
-                memmove(c + s[4], c + sizeof p, s[5]);  /* tag appended */
-                e = verifyocb(key, iv, p, a, c, s[3], s[2], h, buffer);
+                memmove(c + s[5], c + sizeof p, s[3]);  /* tag appended */
+                e = verifyocb(key, iv, p, a, c, s[4], s[2], h, buffer);
                 fprintf(files[2 - !e], "%s\n", buffer); /* save the log */
                 ++count[0];
                 if (e & 1) ++count[1];

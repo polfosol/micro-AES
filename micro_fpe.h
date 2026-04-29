@@ -147,7 +147,7 @@
 
 /**
  * MINLEN can also be defined independently, using pure integer arithmetics:
- * 
+ *
 #define MINLEN  (RADIX < 5 ? 40 / RADIX  : \
                         32 / (1 + RADIX) + (RADIX < 100) + (RADIX < 1000) + 2)
  */

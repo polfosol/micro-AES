@@ -11,8 +11,7 @@
 #include "aes_testvectors.h"
 
 #if defined(_TESTING_FPE_H_) ^ defined(FPE_TEST_FILE)
-#define   _TESTING_FPE_H_
-#include "../micro_fpe.h"
+#define _TESTING_FPE_H_
 
 int verifyfpe(uint8_t* key, uint8_t* twk, const char* a, char* p, char* c,
               size_t np, size_t nt, char* r)
@@ -91,7 +90,7 @@ void aes_fpe_test(FILE** files, unsigned* count)
         if (e == 3)
         {
 #if FF_X == 3
-            s[0] = !*s && (s[3] == FF3_TWEAK_LEN || !(twk[3] + twk[7]));
+            s[0] = !*s && (s[3] == FF3_TWEAK_LEN || twk[3] + twk[7] == 0);
 #endif
             if (s[0] && s[1] == CUSTOM_ALPHABET && s[2] == AES_KEYLENGTH)
             {

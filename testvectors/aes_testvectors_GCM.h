@@ -76,14 +76,14 @@ void aes_gcm_test(FILE** files, unsigned* count)
                 str2bytes(value, c);
                 break;
             case 5:
-                str2bytes(value, c + s[4]);
+                str2bytes(value, c + s[3]);
                 break;
             }
             e += (h == 3 || h == 4 || h == 5);
         }
         if (e == 3)
         {
-            if (AES_KEYLENGTH == *s && GCM_NONCE_LEN == s[1] && s[5] >= GCM_TAG_LEN)
+            if (AES_KEYLENGTH == *s && GCM_NONCE_LEN == s[1] && GCM_TAG_LEN <= s[5])
             {
                 e = verifygcm(key, iv, p, a, c, s[3], s[2], buffer);
                 fprintf(files[2 - !e], "%s\n", buffer); /* save the log */

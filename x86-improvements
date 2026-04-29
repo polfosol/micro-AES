@@ -1,17 +1,17 @@
-/** Since µAES code is optimized for 8-bit CPUs, it might be much less efficient
- * for a 32-bit machine. We can apply a few tweaks, especially in the process of
- * mixing columns, to boost the performance on such systems. It's safe to assume
- * that the `unsigned` keyword is equivalent to `uint32_t` type. But endian-ness
- * of the system must be known or pre-determined, either by including <endian.h>
- * or evaluating an expression. For example suppose `SYSTEM_IS_BIG_ENDIAN` macro
- * indicates whether a system is big-endian or not! Then, the following piece of
- * code can be used to replace the lines #88 to #134 of the "micro_aes.c" source
- * file —starting with `#if DISCARD_SUBROUTINES`. Next, the body of `MixColumns`
- * and `InvMixColumns` functions must be updated to incorporate these changes */
+/** Since µAES code is optimized for 8-bit CPUs, it may be much less efficient
+ for a 32-bit machine. We can apply a few tweaks, especially in the process of
+ mixing columns, to boost the performance on such systems. It's safe to assume
+ that the `unsigned` keyword is equivalent to `uint32_t` type. But endian-ness
+ of the system must be known or pre-determined, either by including <endian.h>
+ or evaluating an expression. For example suppose `SYSTEM_IS_BIG_ENDIAN` macro
+ indicates whether a system is big-endian or not! We can replace the lines #95
+ to #136 of the "micro_aes.c" source file —i.e the whole preprocessor block of
+ `#if AVOID_FUNCTION_CALL` with the following lines. Then, update `MixColumns`
+ and `InvMixColumns` methods to incorporate these changes, as is shown below. */
 
 #if CHECK_ENDIANNES_AT_RUNTIME
-static const unsigned  ShiftLE  = 16;
-#define RL8(x)  rotl( x, 8U + *(char*) &ShiftLE )
+static const unsigned OffsetLE = 16;
+#define RL8(x)  rotl( x, 8U + *(char*) &OffsetLE )
 
 #elif SYSTEM_IS_BIG_ENDIAN               /* ! use appropriate standard macros */
 #define RL8(x)  rotl( x, 8 )
@@ -45,26 +45,26 @@ static void quad_xtime( unsigned* x )
 
 --------------------------------------------------------------------------------
 MixColumns:
-    unsigned rt, i, *s = (unsigned*) &state[0];
-    for (i = Nb; i--; ++s)
+    unsigned n = Nb, rr, *s;
+    for (s = (unsigned*) &state[0]; n--; ++s)
     {
-        rt  = RRR( *s );
+        rr  = RRR( *s );
         *s ^= RL8( *s );
         quad_xtime( s );
-        *s ^= rt;
+        *s ^= rr;
     }
 
 InvMixColumns:
-    unsigned rt, i, *s = (unsigned*) &state[0];
-    for (i = Nb; i--; ++s)
+    unsigned n = Nb, rr, *s;
+    for (s = (unsigned*) &state[0]; n--; ++s)
     {
-        rt  = RRR( *s );
+        rr  = RRR( *s );
         quad_xtime( s );
-        rt ^= RL8( *s ) ^ *s;
+        rr ^= RL8( *s ) ^ *s;
         quad_xtime( s );
-        rt ^= R16( *s ) ^ *s;
+        rr ^= R16( *s ) ^ *s;
         quad_xtime( s );
-        *s ^= RRR( *s ) ^ rt;
+        *s ^= RRR( *s ) ^ rr;
     }
 
 ================================================================================
@@ -92,15 +92,15 @@ KeyExpansion:
         mov     eax, 16
         mov     dl, 1
         movaps  XMMWORD PTR RoundKey[rip], xmm0
-.L7:
+.L4:
         test    al, 15
-        jne     .L4
+        jne     .L1
         movaps  xmm1, XMMWORD PTR RoundKey[rax-16]
         movups  XMMWORD PTR RoundKey[rax], xmm1
         test    dl, dl
-        jne     .L5
+        jne     .L2
         mov     dl, 27
-.L5:
+.L2:
         movzx   ecx, BYTE PTR RoundKey[rax-3]
         mov     cl, BYTE PTR sbox[rcx]
         xor     cl, BYTE PTR RoundKey[rax]
@@ -116,25 +116,25 @@ KeyExpansion:
         movzx   ecx, BYTE PTR RoundKey[rax-4]
         mov     cl, BYTE PTR sbox[rcx]
         xor     BYTE PTR RoundKey[rax+3], cl
-        jmp     .L6
-.L4:
+        jmp     .L3
+.L1:
         mov     ecx, DWORD PTR RoundKey[rax]
         xor     ecx, DWORD PTR RoundKey[rax-4]
         mov     DWORD PTR RoundKey[rax], ecx
-.L6:
+.L3:
         add     rax, 4
         cmp     rax, 176
-        jne     .L7
+        jne     .L4
         ret
 SubBytes:
         xor     eax, eax
-.L12:
+.L5:
         movzx   edx, BYTE PTR [rdi+rax]
         mov     dl, BYTE PTR sbox[rdx]
         mov     BYTE PTR [rdi+rax], dl
         inc     rax
         cmp     rax, 16
-        jne     .L12
+        jne     .L5
         ret
 ShiftRows:
         mov     dl, BYTE PTR [rdi+5]
@@ -164,7 +164,7 @@ ShiftRows:
         ret
 MixColumns:
         lea     r8, [rdi+16]
-.L16:
+.L6:
         mov     eax, DWORD PTR [rdi]
         mov     esi, eax
         mov     ecx, eax
@@ -181,18 +181,18 @@ MixColumns:
         xor     ecx, esi
         mov     DWORD PTR [rdi-4], ecx
         cmp     rdi, r8
-        jne     .L16
+        jne     .L6
         ret
 rijndaelEncrypt:
         mov     r9, rsi
         push    rdx
         cmp     rsi, rdi
-        je      .L19
+        je      .L7
         movups  xmm0, XMMWORD PTR [rdi]
         movups  XMMWORD PTR [rsi], xmm0
-.L19:
+.L7:
         mov     r10d, OFFSET FLAT:RoundKey
-.L21:
+.L9:
         mov     rdi, r10
         mov     rsi, r9
         add     r10, 16
@@ -201,22 +201,22 @@ rijndaelEncrypt:
         call    SubBytes
         call    ShiftRows
         cmp     r10, OFFSET FLAT:RoundKey+160
-        je      .L20
+        je      .L8
         call    MixColumns
-        jmp     .L21
-.L20:
+        jmp     .L9
+.L8:
         mov     edi, OFFSET FLAT:RoundKey+160
         pop     rax
         jmp     xorBlock
 InvSubBytes:
         xor     eax, eax
-.L24:
+.L10:
         movzx   edx, BYTE PTR [rdi+rax]
         mov     dl, BYTE PTR rsbox[rdx]
         mov     BYTE PTR [rdi+rax], dl
         inc     rax
         cmp     rax, 16
-        jne     .L24
+        jne     .L10
         ret
 InvShiftRows:
         mov     dl, BYTE PTR [rdi+9]
@@ -247,7 +247,7 @@ InvShiftRows:
 InvMixColumns:
         mov     rcx, rdi
         lea     rsi, [rdi+16]
-.L28:
+.L11:
         mov     rdi, rcx
         mov     r8d, DWORD PTR [rcx]
         add     rcx, 4
@@ -282,7 +282,7 @@ InvMixColumns:
         xor     eax, edx
         mov     DWORD PTR [rcx-4], eax
         cmp     rsi, rcx
-        jne     .L28
+        jne     .L11
         ret
 rijndaelDecrypt:
         push    rbp
@@ -290,23 +290,23 @@ rijndaelDecrypt:
         push    rbx
         push    rdx
         cmp     rsi, rdi
-        je      .L31
+        je      .L12
         movups  xmm0, XMMWORD PTR [rdi]
         movups  XMMWORD PTR [rsi], xmm0
-.L31:
+.L12:
         mov     ebp, OFFSET FLAT:RoundKey+144
         mov     bl, 10
-.L34:
+.L15:
         cmp     bl, 10
-        je      .L32
+        je      .L13
         mov     rdi, r11
         call    InvMixColumns
-        jmp     .L33
-.L32:
+        jmp     .L14
+.L13:
         mov     rsi, r11
         mov     edi, OFFSET FLAT:RoundKey+160
         call    xorBlock
-.L33:
+.L14:
         mov     rdi, r11
         mov     rsi, r11
         call    InvShiftRows
@@ -315,7 +315,7 @@ rijndaelDecrypt:
         sub     rbp, 16
         call    xorBlock
         dec     bl
-        jne     .L34
+        jne     .L15
         pop     rax
         pop     rbx
         pop     rbp

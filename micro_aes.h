@@ -2,7 +2,7 @@
  ==============================================================================
  Name        : micro_aes.h
  Author      : polfosol
- Version     : 11
+ Version     : 12
  Copyright   : copyright © 2022 - polfosol
  Description : μAES ™ is a minimalist all-in-one library for AES encryption
  ==============================================================================
@@ -75,11 +75,11 @@ AES block-cipher modes of operation. The following modes can be enabled/disabled
 Parameters and MACROs; refer to the bottom of this document for more info:
  -----------------------------------------------------------------------------*/
 
-#if ECB || (CBC && !CTS) || (XEX && !XTS)
+#if ECB | (CBC && !CTS) | (XEX && !XTS)
 #define AES_PADDING     0  /* standard values: (1) PKCS#7  (2) ISO/IEC7816-4  */
 #endif
 
-#if ECB || CBC || XEX || KWA || MICRO_RJNDL
+#if ECB | CBC | XEX | KWA | MICRO_RJNDL
 #define DECRYPTION      1  /* rijndael decryption is NOT required otherwise.  */
 #endif
 
@@ -121,10 +121,10 @@ enum constant_parameters_of_modes
     EAX_TAG_LEN      = 16, /*  more info at the bottom of this document.      */
 #endif
 
-#if AES___ != 256 && AES___ != 192
-    AES_KEYLENGTH    = 16  /*- fallback value for invalid or undefined AES___ */
-#else
+#if AES___ == 256 || AES___ == 192
     AES_KEYLENGTH    = AES___ / 8
+#else
+    AES_KEYLENGTH    = 16  /* default value (or fallback for invalid AES___)  */
 #endif
 };
 
@@ -468,11 +468,13 @@ Define some error codes here
  -----------------------------------------------------------------------------*/
 enum function_result_codes
 {
-    M_ENCRYPTION_ERROR     = 0x1E,
-    M_DECRYPTION_ERROR     = 0x1D,
-    M_AUTHENTICATION_ERROR = 0x1A,
-    M_DATALENGTH_ERROR     = 0x1L,
-    M_RESULT_SUCCESS       = 0
+    M_ENCRYPTION_ERROR     = 'E',
+    M_DECRYPTION_ERROR     = 'D',
+    M_AUTHENTICATION_ERROR = 'A',
+    M_DATALENGTH_ERROR     = 'L',
+    M_DATAFORMAT_ERROR     = 'F',
+    M_MEMORY_ERROR         = 'M',
+    M_SUCCESS              =  0
 };
 
 #endif /* header guard */
@@ -554,7 +556,7 @@ enum function_result_codes
     length of the input cipher/plain text is 'always' less than 4KB, you can
     enable the SMALL_CIPHER macro to save a few bytes in the compiled code. This
     assumption is likely to be valid for some embedded systems and small-scale
-    applications. Furthermore, enabling the INLINE_SUBROUTINES macro may have a
+    applications. Furthermore, enabling the AVOID_FUNCTION_CALL macro may have a
     positive effect on the speed while increasing the size of compiled code.
     Nonetheless, it is also possible to get different results sometimes.
 

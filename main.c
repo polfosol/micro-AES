@@ -107,8 +107,8 @@ static void hex2bytes(const char* hex, uint8_t* bytes)
 
 static void check(const char* method, void* result, const void* expected, size_t size)
 {
-    int c = memcmp(expected, result, size);
-    printf("AES-%d %s: %s\n", AES_KEYLENGTH * 8, method, c ? "FAILED :`(" : "PASSED!");
+    const char* score = memcmp(expected, result, size) ? "FAILED :`(" : "PASSED!";
+    printf("AES-%d %s: %s\n", AES_KEYLENGTH * 8, method, score);
     memset(result, 0xcc, TAGGED);
 }
 
@@ -122,16 +122,17 @@ int main(void)
     hex2bytes(iVec, iv);
     hex2bytes(plainText, input);
 #if MICRO_RJNDL
-    hex2bytes(iVec, input + 48);
-    hex2bytes(secondKey, test);
-    a = AES_KEYLENGTH == 16 ? key : input + (AES_KEYLENGTH - 24) * 4;
+    hex2bytes(AES_KEYLENGTH == 16 ? cipherKey : plainText, test);
+    a = &test[AES_KEYLENGTH != 32 ? 0 : 32];
+    hex2bytes(iVec, test + 48);
+    hex2bytes(secondKey, key);
 
-    AES_Cipher(test, 'E', authKey, output);
-    AES_Cipher(authKey, 'E', test, output + 16);
+    AES_Cipher(key, 'E', authKey, output);
+    AES_Cipher(authKey, 'E', key, output + 16);
     check("Encryption test", output, a, 32);
-    AES_Cipher(test, 'D', a, output + 16);
+    AES_Cipher(key, 'D', a, output + 16);
     AES_Cipher(authKey, 'D', a + 16, output);
-    check("Decryption test", output, test, 32);
+    check("Decryption test", output, key, 32);
     return 0;
 #endif
     printf("%s %s Test results\n", __DATE__, __TIME__);
@@ -143,28 +144,28 @@ int main(void)
     AES_ECB_decrypt(key, test, sizeof input, output);
     check("ECB decryption", output, input, sp);
 #endif
-#if CBC && AES___ == 128
+#if CBC && AES___ < 192
     hex2bytes(cbccipher, test);
     AES_CBC_encrypt(key, iv, input, sp, output);
     check("CBC encryption", output, test, CTS ? sp : sizeof input);
     AES_CBC_decrypt(key, iv, test, CTS ? sp : sizeof input, output);
     check("CBC decryption", output, input, sp);
 #endif
-#if CFB && AES___ == 128
+#if CFB && AES___ < 192
     hex2bytes(cfbcipher, test);
     AES_CFB_encrypt(key, iv, input, sp, output);
     check("CFB encryption", output, test, sp);
     AES_CFB_decrypt(key, iv, test, sp, output);
     check("CFB decryption", output, input, sp);
 #endif
-#if OFB && AES___ == 128
+#if OFB && AES___ < 192
     hex2bytes(ofbcipher, test);
     AES_OFB_encrypt(key, iv, input, sp, output);
     check("OFB encryption", output, test, sp);
     AES_OFB_decrypt(key, iv, test, sp, output);
     check("OFB decryption", output, input, sp);
 #endif
-#if CTR_NA && AES___ == 128
+#if CTR_NA && AES___ < 192
     hex2bytes(ctrcipher, test);
     AES_CTR_encrypt(key, iv, input, sp, output);
     check("CTR encryption", output, test, sp);
@@ -178,12 +179,12 @@ int main(void)
     AES_XTS_decrypt(key, iv, test, sp, output);
     check("XTS decryption", output, input, sp);
 #endif
-#if CMAC && AES___ == 128
+#if CMAC && AES___ < 192
     hex2bytes(ptxt_cmac, test);
     AES_CMAC(key, input, sp, output);
     check("plaintext CMAC", output, test, 16);
 #endif
-#if POLY1305 && AES___ == 128
+#if POLY1305 && AES___ < 192
     hex2bytes(poly_1305, test);
     AES_Poly1305(key, iv, input, sp, output);
     check("Poly1305 of PT", output, test, 16);
@@ -195,35 +196,35 @@ int main(void)
     AES_GCM_decrypt(key, iv, a, sa, test, sp, output);
     check("GCM decryption", output, input, sp);
 #endif
-#if CCM && AES___ == 128
+#if CCM && AES___ < 192
     hex2bytes(ccmcipher, test);
     AES_CCM_encrypt(key, iv, a, sa, input, sp, output);
     check("CCM encryption", output, test, sp + CCM_TAG_LEN);
     *output ^= AES_CCM_decrypt(key, iv, a, sa, test, sp, output);
     check("CCM decryption", output, input, sp);
 #endif
-#if OCB && AES___ == 128
+#if OCB && AES___ < 192
     hex2bytes(ocbcipher, test);
     AES_OCB_encrypt(key, iv, a, sa, input, sp, output);
     check("OCB encryption", output, test, sp + OCB_TAG_LEN);
     *output ^= AES_OCB_decrypt(key, iv, a, sa, test, sp, output);
     check("OCB decryption", output, input, sp);
 #endif
-#if SIV && AES___ == 128
+#if SIV && AES___ < 192
     hex2bytes(sivcipher, test);
     AES_SIV_encrypt(key, a, sa, input, sp, output, output + 16);
     check("SIV encryption", output, test, sp + 16);
     *output ^= AES_SIV_decrypt(key, test, a, sa, test + 16, sp, output);
     check("SIV decryption", output, input, sp);
 #endif
-#if GCM_SIV && AES___ == 128
+#if GCM_SIV && AES___ < 192
     hex2bytes(gsvcipher, test);
     GCM_SIV_encrypt(key, iv, a, sa, input, sp, output);
     check("GCMSIV encrypt", output, test, sp + SIVGCM_TAG_LEN);
     *output ^= GCM_SIV_decrypt(key, iv, a, sa, test, sp, output);
     check("GCMSIV decrypt", output, input, sp);
 #endif
-#if EAX && AES___ == 128
+#if EAX && AES___ < 192
     hex2bytes(eaxcipher, test);
 #if EAXP
     AES_EAX_encrypt(key, a, sa, input, sp, output);
@@ -236,16 +237,16 @@ int main(void)
 #endif
     check("EAX decryption", output, input, sp);
 #endif
-#if FPE && AES___ == 128 && !CUSTOM_ALPHABET
-    memcpy(test, fpecipher, sp = FF_X == 3 ? 55 : PTSIZE);
+#if FPE && AES___ < 192 && !CUSTOM_ALPHABET
+    sp = strlen(fpecipher);
 #if FF_X == 3
     AES_FPE_encrypt(key, a, fpe_plain, sp, output);
-    check("FF3 encryption", output, test, sp);
-    AES_FPE_decrypt(key, a, test, sp, output);
+    check("FF3 encryption", output, fpecipher, sp);
+    AES_FPE_decrypt(key, a, fpecipher, sp, output);
 #else
     AES_FPE_encrypt(key, a, sa, fpe_plain, sp, output);
-    check("FF1 encryption", output, test, sp);
-    AES_FPE_decrypt(key, a, sa, test, sp, output);
+    check("FF1 encryption", output, fpecipher, sp);
+    AES_FPE_decrypt(key, a, sa, fpecipher, sp, output);
 #endif
     check("FPE decryption", output, fpe_plain, sp);
 #endif

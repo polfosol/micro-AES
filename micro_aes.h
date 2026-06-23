@@ -14,78 +14,136 @@
 /**----------------------------------------------------------------------------
 You can use different AES algorithms by changing this macro. Default is AES-128
  -----------------------------------------------------------------------------*/
-#define AES___     128     /* or 256 (or 192; not standardized in some modes) */
+#ifndef AES___
+#define AES___     256     /* or 256 (or 192; not standardized in some modes) */
+#endif
 
 /**----------------------------------------------------------------------------
 AES block-cipher modes of operation. The following modes can be enabled/disabled
  by setting their corresponding macros to TRUE (1) or FALSE (0).
  -----------------------------------------------------------------------------*/
+#ifndef BLOCKCIPHERS
 #define BLOCKCIPHERS 1
+#endif
+#ifndef AEAD_MODES
 #define AEAD_MODES   1     /* authenticated encryption with associated data.  */
+#endif
 
 #if BLOCKCIPHERS
+#ifndef ECB
 #define ECB          1     /* electronic code-book (NIST SP 800-38A)          */
+#endif
+#ifndef CBC
 #define CBC          1     /* cipher block chaining (NIST SP 800-38A)         */
+#endif
+#ifndef CFB
 #define CFB          1     /* cipher feedback (NIST SP 800-38A)               */
+#endif
+#ifndef OFB
 #define OFB          1     /* output feedback (NIST SP 800-38A)               */
+#endif
+#ifndef CTR
 #define CTR          1     /* counter-block (NIST SP 800-38A)                 */
+#endif
+#ifndef XEX
 #define XEX          1     /* xor-encrypt-xor (NIST SP 800-38E)               */
+#endif
+#ifndef KWA
 #define KWA          1     /* key wrap with authentication (NIST SP 800-38F)  */
+#endif
+#ifndef FPE
 #define FPE          1     /* format-preserving encryption (NIST SP 800-38G)  */
+#endif
 #endif
 
 #if AEAD_MODES
+#ifndef CMAC
 #define CMAC         1     /* message authentication code (NIST SP 800-38B)   */
+#endif
 
 #if CTR
+#ifndef CCM
 #define CCM          1     /* counter with CBC-MAC (RFC-3610/NIST SP 800-38C) */
+#endif
+#ifndef GCM
 #define GCM          1     /* Galois/counter mode with GMAC (NIST SP 800-38D) */
+#endif
+#ifndef EAX
 #define EAX          1     /* encrypt-authenticate-translate (ANSI C12.22)    */
+#endif
+#ifndef SIV
 #define SIV          1     /* synthetic initialization vector (RFC-5297)      */
+#endif
+#ifndef GCM_SIV
 #define GCM_SIV      1     /* nonce misuse-resistant AES-GCM (RFC-8452)       */
+#endif
 #endif
 
 #if XEX
+#ifndef OCB
 #define OCB          1     /* offset codebook mode with PMAC (RFC-7253)       */
 #endif
+#endif
 
+#ifndef POLY1305
 #define POLY1305     1     /* poly1305-AES mac (https://cr.yp.to/mac.html)    */
+#endif
 #endif
 
 #if CBC
+#ifndef CTS
 #define CTS          1     /* ciphertext stealing (CS3: unconditional swap)   */
+#endif
 #endif
 
 #if XEX
+#ifndef XTS
 #define XTS          1     /* XEX tweaked-codebook with ciphertext stealing   */
+#endif
 #endif
 
 #if CTR
+#ifndef CTR_NA
 #define CTR_NA       1     /* pure counter mode, with no authentication       */
+#endif
 #endif
 
 #if EAX
+#ifndef EAXP
 #define EAXP         0     /* EAX-prime, as specified by IEEE Std 1703        */
 #endif
+#endif
 
+#ifndef WTF
 #define WTF ! (BLOCKCIPHERS | AEAD_MODES)
+#endif
+#ifndef MICRO_RJNDL
 #define MICRO_RJNDL  WTF   /* none of above; just rijndael API. dude.., why?  */
+#endif
 
 /**----------------------------------------------------------------------------
 Parameters and MACROs; refer to the bottom of this document for more info:
  -----------------------------------------------------------------------------*/
 
 #if ECB | (CBC && !CTS) | (XEX && !XTS)
+#ifndef AES_PADDING
 #define AES_PADDING     0  /* standard values: (1) PKCS#7  (2) ISO/IEC7816-4  */
+#endif
 #endif
 
 #if ECB | CBC | XEX | KWA | MICRO_RJNDL
+#ifndef DECRYPTION
 #define DECRYPTION      1  /* rijndael decryption is NOT required otherwise.  */
+#endif
 #endif
 
 #if FPE
+#ifndef CUSTOM_ALPHABET
 #define CUSTOM_ALPHABET 0  /* if disabled, use default alphabet (digits 0..9) */
+#endif
+#ifndef FF_X
 #define FF_X            1  /* algorithm type:  (1) for FF1, or (3) for FF3-1  */
+#endif
 #endif
 
 enum constant_parameters_of_modes

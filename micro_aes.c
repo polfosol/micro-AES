@@ -28,9 +28,15 @@ enum basic_constants
 
 #define IMPLEMENT(x)  (x) > 0
 
+#ifndef INCREASE_SECURITY
 #define INCREASE_SECURITY   0    /* see the comments at the bottom of header. */
+#endif
+#ifndef AVOID_FUNCTION_CALL
 #define AVOID_FUNCTION_CALL 0
+#endif
+#ifndef SMALL_CIPHER
 #define SMALL_CIPHER        0
+#endif
 
 /** Lookup-tables are "static constant", so that they can be placed in read-only
  * storage instead of RAM. They can be computed dynamically trading ROM for RAM.
